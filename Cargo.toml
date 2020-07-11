@@ -4,6 +4,13 @@ version = "0.1.0"
 authors = ["Yoshida Shin <wbcchsyn@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "BulkAllocator implements trait core::alloc::AllocRef"
+repository = "https://github.com/wbcchsyn/rust-bulk-allocator"
+license = "LGPL-3.0-or-later OR Apache-2.0"
+readme = "README.md"
+
+keywords = ["alloc", "allocator", "memory", "AllocRef"]
+
+categories = ["memory-management"]
 
 [dependencies]
