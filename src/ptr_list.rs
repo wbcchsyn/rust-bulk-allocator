@@ -41,3 +41,17 @@ impl Default for PtrList {
         Self { next: None }
     }
 }
+
+impl PtrList {
+    pub fn pop(&mut self) -> Option<NonNull<Self>> {
+        match self.next {
+            None => None,
+            Some(nonnull) => {
+                unsafe {
+                    self.next = nonnull.as_ref().next;
+                }
+                Some(nonnull)
+            }
+        }
+    }
+}
