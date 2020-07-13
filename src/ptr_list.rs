@@ -32,7 +32,12 @@
 use core::ptr::NonNull;
 
 /// Forming forward linked list
-#[derive(Clone, Copy, Debug)]
 pub struct PtrList {
     next: Option<NonNull<PtrList>>,
+}
+
+impl Default for PtrList {
+    fn default() -> Self {
+        Self { next: None }
+    }
 }
