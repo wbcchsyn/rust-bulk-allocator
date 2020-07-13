@@ -54,4 +54,14 @@ impl PtrList {
             }
         }
     }
+
+    pub fn push<T>(&mut self, ptr: NonNull<T>) {
+        let mut ptr = ptr.cast::<Self>();
+
+        unsafe {
+            ptr.as_mut().next = self.next;
+        }
+
+        self.next = Some(ptr);
+    }
 }
