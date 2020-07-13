@@ -65,3 +65,36 @@ impl PtrList {
         self.next = Some(ptr);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pop_and_push() {
+        let mut head = PtrList::default();
+        let mut fst = PtrList::default();
+        let mut snd = PtrList::default();
+
+        let fst = NonNull::new(&mut fst).unwrap();
+        let snd = NonNull::new(&mut snd).unwrap();
+
+        {
+            debug_assert_eq!(None, head.pop());
+        }
+
+        {
+            head.push(fst);
+            debug_assert_eq!(Some(fst), head.pop());
+            debug_assert_eq!(None, head.pop());
+        }
+
+        {
+            head.push(fst);
+            head.push(snd);
+            debug_assert_eq!(Some(snd), head.pop());
+            debug_assert_eq!(Some(fst), head.pop());
+            debug_assert_eq!(None, head.pop());
+        }
+    }
+}
