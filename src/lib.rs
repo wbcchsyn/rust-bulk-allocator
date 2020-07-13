@@ -2,6 +2,8 @@
 //
 // "LGPL-3.0-or-later OR Apache-2.0"
 //
+// This is part of rust-bulk-allocator
+//
 //  rust-bulk-allocator is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU Lesser General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
@@ -26,3 +28,5 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+mod ptr_list;
