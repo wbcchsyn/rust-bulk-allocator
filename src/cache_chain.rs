@@ -28,3 +28,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+use crate::ptr_list::PtrList;
+use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
+
+const CHAIN_LENGTH: usize =
+    (MAX_CACHE_SIZE.trailing_zeros() - MIN_CACHE_SIZE.trailing_zeros() + 1) as usize;
+
+/// Slice of PtrList
+/// (Forms like 2 dimensions vector.)
+pub struct CacheChain {
+    caches: [PtrList; CHAIN_LENGTH],
+}
