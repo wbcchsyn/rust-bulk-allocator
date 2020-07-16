@@ -40,3 +40,11 @@ const CHAIN_LENGTH: usize =
 pub struct CacheChain {
     caches: [PtrList; CHAIN_LENGTH],
 }
+
+impl Default for CacheChain {
+    fn default() -> Self {
+        Self {
+            caches: Default::default(),
+        }
+    }
+}
