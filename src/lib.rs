@@ -30,3 +30,15 @@
 // limitations under the License.
 
 mod ptr_list;
+
+use crate::ptr_list::PtrList;
+use core::alloc::Layout;
+use core::mem::size_of;
+
+/// The maximum memory size BulkAllocator::alloc() uses the cache.
+pub const MAX_CACHE_SIZE: usize = 1024;
+/// The minimum memory size BulkAllocator::alloc() returns.
+pub const MIN_CACHE_SIZE: usize = size_of::<PtrList>();
+/// Layout of memory chunk BulkAllocator acquires from the backend.
+pub const MEMORY_CHUNK_LAYOUT: Layout =
+    unsafe { Layout::from_size_align_unchecked(MAX_CACHE_SIZE * 8, MIN_CACHE_SIZE) };
