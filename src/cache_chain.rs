@@ -49,6 +49,16 @@ impl Default for CacheChain {
     }
 }
 
+impl CacheChain {
+    fn iter(&self) -> CacheChainIter {
+        CacheChainIter {
+            body: &self.caches,
+            index_: 0,
+            size_: MIN_CACHE_SIZE as i32,
+        }
+    }
+}
+
 pub struct CacheChainIter<'a> {
     body: &'a [PtrList],
     index_: i32,
