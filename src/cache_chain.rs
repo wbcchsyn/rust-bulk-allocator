@@ -31,6 +31,7 @@
 
 use crate::ptr_list::PtrList;
 use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
+use core::mem::size_of;
 use core::ptr::NonNull;
 
 const CHAIN_LENGTH: usize =
@@ -116,10 +117,29 @@ impl<'a> DoubleEndedIterator for CacheChainIter<'a> {
 
 #[derive(Copy, Clone)]
 pub struct CacheChainIterMut<'a> {
-    body: NonNull<PtrList>,
+    item_: NonNull<PtrList>,
     index_: i32,
     size_: i32,
     _phantom: std::marker::PhantomData<&'a PtrList>,
+}
+
+impl CacheChainIterMut<'_> {
+    pub fn item(&mut self) -> &mut PtrList {
+        let ptr = (self.item_.as_ptr() as usize) + (size_of::<PtrList>() * self.index());
+        unsafe { &mut *(ptr as *mut PtrList) }
+    }
+
+    pub fn index(&self) -> usize {
+        debug_assert!(0 <= self.index_);
+        debug_assert!(self.index_ < (CHAIN_LENGTH) as i32);
+        self.index_ as usize
+    }
+
+    pub fn size(&self) -> usize {
+        debug_assert!((MIN_CACHE_SIZE as i32) <= self.size_);
+        debug_assert!(self.size_ <= (MAX_CACHE_SIZE as i32));
+        self.size_ as usize
+    }
 }
 
 #[cfg(test)]
