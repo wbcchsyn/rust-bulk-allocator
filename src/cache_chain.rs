@@ -59,6 +59,15 @@ impl CacheChain {
             size_: MIN_CACHE_SIZE as i32,
         }
     }
+
+    fn iter_mut(&mut self) -> CacheChainIterMut {
+        CacheChainIterMut {
+            item_: unsafe { NonNull::new_unchecked(&mut self.caches[0]) },
+            index_: 0,
+            size_: MIN_CACHE_SIZE as i32,
+            _phantom: Default::default(),
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
