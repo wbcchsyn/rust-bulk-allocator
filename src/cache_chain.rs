@@ -59,6 +59,7 @@ impl CacheChain {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct CacheChainIter<'a> {
     body: &'a [PtrList],
     index_: i32,
