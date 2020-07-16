@@ -64,3 +64,21 @@ pub struct CacheChainIter<'a> {
     index_: i32,
     size_: i32,
 }
+
+impl CacheChainIter<'_> {
+    pub fn item(&self) -> &PtrList {
+        &self.body[self.index()]
+    }
+
+    pub fn index(&self) -> usize {
+        debug_assert!(0 <= self.index_);
+        debug_assert!(self.index_ < (CHAIN_LENGTH) as i32);
+        self.index_ as usize
+    }
+
+    pub fn size(&self) -> usize {
+        debug_assert!((MIN_CACHE_SIZE as i32) <= self.size_);
+        debug_assert!(self.size_ <= (MAX_CACHE_SIZE as i32));
+        self.size_ as usize
+    }
+}
