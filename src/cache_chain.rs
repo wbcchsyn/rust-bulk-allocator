@@ -48,3 +48,9 @@ impl Default for CacheChain {
         }
     }
 }
+
+pub struct CacheChainIter<'a> {
+    body: &'a [PtrList],
+    index_: i32,
+    size_: i32,
+}
