@@ -83,3 +83,38 @@ impl CacheChainIter<'_> {
         self.size_ as usize
     }
 }
+
+impl<'a> Iterator for CacheChainIter<'a> {
+    type Item = Self;
+
+    fn next(&mut self) -> Option<Self> {
+        if (CHAIN_LENGTH as i32) <= self.index_ {
+            None
+        } else {
+            let ret = *self;
+            self.index_ += 1;
+            self.size_ *= 2;
+            Some(ret)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn iterator_count() {
+        let chain = CacheChain::default();
+        let count = chain.iter().count();
+        assert_eq!(CHAIN_LENGTH, count);
+    }
+
+    #[test]
+    fn iterator_last_item() {
+        let chain = CacheChain::default();
+        let last = chain.iter().last().unwrap();
+        assert_eq!(CHAIN_LENGTH - 1, last.index());
+        assert_eq!(MAX_CACHE_SIZE, last.size());
+    }
+}
