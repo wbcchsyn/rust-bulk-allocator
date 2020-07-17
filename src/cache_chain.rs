@@ -65,13 +65,30 @@ impl CacheChain {
     }
 
     pub fn pop(&mut self, index: CacheChainIter) -> Option<MemoryBlock> {
-        match self.caches[index.index()].pop() {
-            None => None,
-            Some(ptr) => Some(MemoryBlock {
-                ptr: ptr.cast::<u8>(),
-                size: index.size(),
-            }),
+        for mut it in index {
+            match self.caches[it.index()].pop() {
+                None => continue,
+                Some(ptr) => {
+                    let mut block = MemoryBlock {
+                        ptr: ptr.cast::<u8>(),
+                        size: it.size(),
+                    };
+
+                    for _ in index.index()..it.index() {
+                        it.next_back();
+                        let (f, s) = split_memory_block(block, it.size());
+                        debug_assert_eq!(f.size, s.size);
+                        self.caches[it.index()].push(s.ptr);
+                        block = f;
+                    }
+
+                    debug_assert_eq!(index.size(), block.size);
+                    return Some(block);
+                }
+            }
         }
+
+        None
     }
 
     pub fn push(&mut self, ptr: NonNull<u8>, index: CacheChainIter) {
@@ -94,7 +111,7 @@ fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryB
     (fst, snd)
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct CacheChainIter {
     index_: i32,
     size_: i32,
