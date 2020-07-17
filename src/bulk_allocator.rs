@@ -32,10 +32,11 @@
 use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
-use crate::MEMORY_CHUNK_LAYOUT;
-use core::alloc::AllocRef;
+use crate::{MAX_CACHE_SIZE, MEMORY_CHUNK_LAYOUT, MIN_CACHE_SIZE};
+use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::mem::size_of;
 use core::ptr::NonNull;
+use core::result::Result;
 use std::alloc::Global;
 
 /// BulkAllocator pools allocated memory and frees it on the destruction.
@@ -95,9 +96,73 @@ impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
     }
 }
 
+unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
+    /// ToDo: Implement later
+    fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+        match self.pool.find(layout) {
+            // Too large for the pool
+            None => self.backend.alloc(layout, init),
+            Some(mut index) => match index.item().pop() {
+                // No cache is pooled.
+                None => unsafe {
+                    let layout = Layout::from_size_align_unchecked(index.size(), index.size());
+                    self.backend.alloc(layout, init)
+                },
+                // Cache is pooled.
+                Some(ptr) => {
+                    let block = MemoryBlock {
+                        ptr: ptr.cast::<u8>(),
+                        size: index.size(),
+                    };
+
+                    // Fill the block with 0 if necessary
+                    if init == AllocInit::Zeroed {
+                        unsafe {
+                            core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
+                        }
+                    }
+
+                    Ok(block)
+                }
+            },
+        }
+    }
+
+    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+        // Pool if possible
+        match self.pool.find(layout) {
+            // Too large to cache
+            None => self.backend.dealloc(ptr, layout),
+            // Cache the memory
+            Some(mut index) => index.item().push(ptr),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SIZES: [usize; 10] = [
+        1,
+        2,
+        3,
+        4,
+        5,
+        MIN_CACHE_SIZE - 1,
+        MIN_CACHE_SIZE,
+        MIN_CACHE_SIZE + 1,
+        MAX_CACHE_SIZE - 1,
+        MAX_CACHE_SIZE,
+    ];
+    const ALIGNS: [usize; 4] = [2, 4, MIN_CACHE_SIZE, MAX_CACHE_SIZE];
+    const LARGE_LAYOUTS: [Layout; 3] = unsafe {
+        [
+            Layout::from_size_align_unchecked(MAX_CACHE_SIZE + 1, MAX_CACHE_SIZE),
+            Layout::from_size_align_unchecked(MAX_CACHE_SIZE, 2 * MAX_CACHE_SIZE),
+            Layout::from_size_align_unchecked(MAX_CACHE_SIZE + 1, 2 * MAX_CACHE_SIZE),
+        ]
+    };
 
     #[test]
     fn default_constructor() {
@@ -114,5 +179,57 @@ mod tests {
     fn reference_constructor() {
         let mut global = Global::default();
         let _ = BulkAllocator::<'_, Global>::from(&mut global);
+    }
+
+    #[test]
+    fn alloc_and_dealloc_works() {
+        let mut alloc = BulkAllocator::default();
+
+        let mut check = |size, align| {
+            let layout = Layout::from_size_align(size, align).unwrap();
+
+            // AllocInit::Uninitialized
+            {
+                let block = alloc.alloc(layout, AllocInit::Uninitialized).unwrap();
+
+                assert!(layout.size() <= block.size);
+
+                let ptr = block.ptr.as_ptr() as usize;
+                assert_eq!(0, ptr % layout.align());
+
+                unsafe {
+                    alloc.dealloc(block.ptr, layout);
+                }
+            }
+
+            // AllocInit::Zeroed
+            {
+                let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+
+                assert!(layout.size() <= block.size);
+
+                let ptr = block.ptr.as_ptr() as usize;
+                assert_eq!(0, ptr % layout.align());
+
+                unsafe {
+                    let s = core::slice::from_raw_parts(ptr as *const u8, block.size);
+                    for &u in s {
+                        assert_eq!(0, u);
+                    }
+
+                    alloc.dealloc(block.ptr, layout);
+                }
+            }
+        };
+
+        for &s in &SIZES {
+            for &a in &ALIGNS {
+                check(s, a);
+            }
+        }
+
+        for &l in &LARGE_LAYOUTS {
+            check(l.size(), l.align());
+        }
     }
 }
