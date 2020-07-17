@@ -33,6 +33,7 @@ use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
 use core::alloc::AllocRef;
+use std::alloc::Global;
 
 /// BulkAllocator pools allocated memory and frees it on the destruction.
 ///
@@ -48,4 +49,24 @@ pub struct BulkAllocator<'a, B: 'a + AllocRef> {
     to_free: PtrList,
     // Backend allocator
     backend: Backend<'a, B>,
+}
+
+impl Default for BulkAllocator<'static, Global> {
+    fn default() -> Self {
+        Self {
+            pool: Default::default(),
+            to_free: Default::default(),
+            backend: Default::default(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_constructor() {
+        let _ = BulkAllocator::<'static, Global>::default();
+    }
 }
