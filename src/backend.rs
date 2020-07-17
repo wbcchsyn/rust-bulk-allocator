@@ -69,3 +69,9 @@ impl<B: AllocRef> From<B> for Backend<'static, B> {
         Self::Owned(backend)
     }
 }
+
+impl<'a, B: 'a + AllocRef> From<&'a mut B> for Backend<'a, B> {
+    fn from(backend: &'a mut B) -> Self {
+        Self::Borrowed(backend)
+    }
+}
