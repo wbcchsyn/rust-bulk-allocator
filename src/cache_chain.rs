@@ -73,6 +73,10 @@ impl CacheChain {
         let target = core::cmp::max(layout.size(), layout.align());
         self.iter_mut().find(|x| target <= x.size())
     }
+
+    pub fn push(&mut self, ptr: NonNull<u8>, index: CacheChainIter) {
+        self.caches[index.index()].push(ptr)
+    }
 }
 
 #[derive(Copy, Clone)]
