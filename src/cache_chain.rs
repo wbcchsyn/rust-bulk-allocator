@@ -132,6 +132,21 @@ pub struct CacheChainIterMut<'a> {
     _phantom: std::marker::PhantomData<&'a PtrList>,
 }
 
+impl<'a> Iterator for CacheChainIterMut<'a> {
+    type Item = Self;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if (CHAIN_LENGTH as i32) <= self.index_ {
+            None
+        } else {
+            let ret = *self;
+            self.index_ += 1;
+            self.size_ *= 2;
+            Some(ret)
+        }
+    }
+}
+
 impl CacheChainIterMut<'_> {
     pub fn item(&mut self) -> &mut PtrList {
         let ptr = (self.item_.as_ptr() as usize) + (size_of::<PtrList>() * self.index());
@@ -193,5 +208,20 @@ mod tests {
 
         assert_eq!(0, last.index());
         assert_eq!(MIN_CACHE_SIZE, last.size());
+    }
+
+    #[test]
+    fn mut_iterator_count() {
+        let mut chain = CacheChain::default();
+        let count = chain.iter_mut().count();
+        assert_eq!(CHAIN_LENGTH, count);
+    }
+
+    #[test]
+    fn mut_iterator_last_item() {
+        let mut chain = CacheChain::default();
+        let last = chain.iter_mut().last().unwrap();
+        assert_eq!(CHAIN_LENGTH - 1, last.index());
+        assert_eq!(MAX_CACHE_SIZE, last.size());
     }
 }
