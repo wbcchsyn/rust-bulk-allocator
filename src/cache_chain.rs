@@ -86,7 +86,7 @@ pub struct CacheChainIter {
 }
 
 impl CacheChainIter {
-    pub fn index(&self) -> usize {
+    fn index(&self) -> usize {
         debug_assert!(0 <= self.index_);
         debug_assert!(self.index_ < (CHAIN_LENGTH) as i32);
         self.index_ as usize
