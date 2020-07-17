@@ -55,7 +55,6 @@ impl Default for CacheChain {
 impl CacheChain {
     pub fn iter(&self) -> CacheChainIter {
         CacheChainIter {
-            body: &self.caches,
             index_: 0,
             size_: MIN_CACHE_SIZE as i32,
         }
@@ -77,17 +76,12 @@ impl CacheChain {
 }
 
 #[derive(Copy, Clone)]
-pub struct CacheChainIter<'a> {
-    body: &'a [PtrList],
+pub struct CacheChainIter {
     index_: i32,
     size_: i32,
 }
 
-impl CacheChainIter<'_> {
-    pub fn item(&self) -> &PtrList {
-        &self.body[self.index()]
-    }
-
+impl CacheChainIter {
     pub fn index(&self) -> usize {
         debug_assert!(0 <= self.index_);
         debug_assert!(self.index_ < (CHAIN_LENGTH) as i32);
@@ -101,7 +95,7 @@ impl CacheChainIter<'_> {
     }
 }
 
-impl<'a> Iterator for CacheChainIter<'a> {
+impl Iterator for CacheChainIter {
     type Item = Self;
 
     fn next(&mut self) -> Option<Self> {
@@ -116,7 +110,7 @@ impl<'a> Iterator for CacheChainIter<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for CacheChainIter<'a> {
+impl DoubleEndedIterator for CacheChainIter {
     fn next_back(&mut self) -> Option<Self> {
         if self.index_ < 0 {
             None
