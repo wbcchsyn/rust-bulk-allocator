@@ -60,15 +60,6 @@ impl CacheChain {
         }
     }
 
-    pub fn iter_mut(&mut self) -> CacheChainIterMut {
-        CacheChainIterMut {
-            item_: unsafe { NonNull::new_unchecked(&mut self.caches[0]) },
-            index_: 0,
-            size_: MIN_CACHE_SIZE as i32,
-            _phantom: Default::default(),
-        }
-    }
-
     pub fn find(&self, layout: Layout) -> Option<CacheChainIter> {
         let target = core::cmp::max(layout.size(), layout.align());
         self.iter().find(|x| target <= x.size())
@@ -138,62 +129,6 @@ impl DoubleEndedIterator for CacheChainIter {
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct CacheChainIterMut<'a> {
-    item_: NonNull<PtrList>,
-    index_: i32,
-    size_: i32,
-    _phantom: std::marker::PhantomData<&'a PtrList>,
-}
-
-impl<'a> Iterator for CacheChainIterMut<'a> {
-    type Item = Self;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if (CHAIN_LENGTH as i32) <= self.index_ {
-            None
-        } else {
-            let ret = *self;
-            self.index_ += 1;
-            self.size_ *= 2;
-            Some(ret)
-        }
-    }
-}
-
-impl<'a> DoubleEndedIterator for CacheChainIterMut<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.index_ < 0 {
-            None
-        } else {
-            let ret = *self;
-            self.index_ -= 1;
-            debug_assert_eq!(0, self.size_ % 2);
-            self.size_ /= 2;
-            Some(ret)
-        }
-    }
-}
-
-impl CacheChainIterMut<'_> {
-    pub fn item(&mut self) -> &mut PtrList {
-        let ptr = (self.item_.as_ptr() as usize) + (size_of::<PtrList>() * self.index());
-        unsafe { &mut *(ptr as *mut PtrList) }
-    }
-
-    pub fn index(&self) -> usize {
-        debug_assert!(0 <= self.index_);
-        debug_assert!(self.index_ < (CHAIN_LENGTH) as i32);
-        self.index_ as usize
-    }
-
-    pub fn size(&self) -> usize {
-        debug_assert!((MIN_CACHE_SIZE as i32) <= self.size_);
-        debug_assert!(self.size_ <= (MAX_CACHE_SIZE as i32));
-        self.size_ as usize
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,46 +168,6 @@ mod tests {
     fn reverse_iterator_last_item() {
         let chain = CacheChain::default();
         let last = chain.iter().rev().last().unwrap();
-
-        assert_eq!(0, last.index());
-        assert_eq!(MIN_CACHE_SIZE, last.size());
-    }
-
-    #[test]
-    fn mut_iterator_count() {
-        let mut chain = CacheChain::default();
-        let count = chain.iter_mut().count();
-        assert_eq!(CHAIN_LENGTH, count);
-    }
-
-    #[test]
-    fn mut_iterator_last_item() {
-        let mut chain = CacheChain::default();
-        let last = chain.iter_mut().last().unwrap();
-        assert_eq!(CHAIN_LENGTH - 1, last.index());
-        assert_eq!(MAX_CACHE_SIZE, last.size());
-    }
-
-    #[test]
-    fn reverse_mut_iterator_count() {
-        let mut chain = CacheChain::default();
-        let mut it = chain.iter_mut();
-
-        // Move to the end
-        it.nth(CHAIN_LENGTH - 1);
-        assert!(it.next().is_none());
-
-        // Move to the last item
-        it.next_back();
-
-        let it = it.rev();
-        assert_eq!(CHAIN_LENGTH, it.count());
-    }
-
-    #[test]
-    fn reverse_mut_iterator_last_item() {
-        let mut chain = CacheChain::default();
-        let last = chain.iter_mut().rev().last().unwrap();
 
         assert_eq!(0, last.index());
         assert_eq!(MIN_CACHE_SIZE, last.size());
