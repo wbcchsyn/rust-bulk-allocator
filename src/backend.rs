@@ -63,3 +63,9 @@ impl Default for Backend<'static, Global> {
         Self::Owned(Global::default())
     }
 }
+
+impl<B: AllocRef> From<B> for Backend<'static, B> {
+    fn from(backend: B) -> Self {
+        Self::Owned(backend)
+    }
+}
