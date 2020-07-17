@@ -32,9 +32,8 @@
 use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
-use crate::{MAX_CACHE_SIZE, MEMORY_CHUNK_LAYOUT, MIN_CACHE_SIZE};
+use crate::MEMORY_CHUNK_LAYOUT;
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
-use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
 use std::alloc::Global;
@@ -134,6 +133,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
 
     const SIZES: [usize; 10] = [
         1,
