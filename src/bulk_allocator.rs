@@ -32,7 +32,10 @@
 use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
+use crate::MEMORY_CHUNK_LAYOUT;
 use core::alloc::AllocRef;
+use core::mem::size_of;
+use core::ptr::NonNull;
 use std::alloc::Global;
 
 /// BulkAllocator pools allocated memory and frees it on the destruction.
@@ -80,6 +83,14 @@ where
             pool: Default::default(),
             to_free: Default::default(),
             backend: From::from(backend),
+        }
+    }
+}
+
+impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
+    fn drop(&mut self) {
+        while let Some(ptr) = self.to_free.pop() {
+            unsafe { self.backend.dealloc(ptr.cast::<u8>(), MEMORY_CHUNK_LAYOUT) }
         }
     }
 }
