@@ -71,6 +71,19 @@ impl<B: AllocRef> From<B> for BulkAllocator<'static, B> {
     }
 }
 
+impl<'a, B> From<&'a mut B> for BulkAllocator<'a, B>
+where
+    B: 'a + AllocRef,
+{
+    fn from(backend: &'a mut B) -> Self {
+        Self {
+            pool: Default::default(),
+            to_free: Default::default(),
+            backend: From::from(backend),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +97,11 @@ mod tests {
     fn move_constructor() {
         let global = Global::default();
         let _ = BulkAllocator::<'static, Global>::from(global);
+    }
+
+    #[test]
+    fn reference_constructor() {
+        let mut global = Global::default();
+        let _ = BulkAllocator::<'_, Global>::from(&mut global);
     }
 }
