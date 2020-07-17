@@ -102,9 +102,14 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
         self.backend.alloc(layout, init)
     }
 
-    /// ToDo: Implement later
     unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
-        self.backend.dealloc(ptr, layout)
+        // Pool if possible
+        match self.pool.find(layout) {
+            // Too large to cache
+            None => self.backend.dealloc(ptr, layout),
+            // Cache the memory
+            Some(mut index) => index.item().push(ptr),
+        }
     }
 }
 
