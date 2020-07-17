@@ -31,6 +31,7 @@
 
 use crate::ptr_list::PtrList;
 use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
+use core::alloc::Layout;
 use core::mem::size_of;
 use core::ptr::NonNull;
 
@@ -67,6 +68,11 @@ impl CacheChain {
             size_: MIN_CACHE_SIZE as i32,
             _phantom: Default::default(),
         }
+    }
+
+    pub fn find(&mut self, layout: Layout) -> Option<CacheChainIterMut> {
+        let target = core::cmp::max(layout.size(), layout.align());
+        self.iter_mut().find(|x| target <= x.size())
     }
 }
 
@@ -262,5 +268,38 @@ mod tests {
 
         assert_eq!(0, last.index());
         assert_eq!(MIN_CACHE_SIZE, last.size());
+    }
+
+    #[test]
+    fn find_works() {
+        let mut chain = CacheChain::default();
+
+        for s in &[1, 7, 8, 9, MAX_CACHE_SIZE - 1, MAX_CACHE_SIZE] {
+            for a in &[2, 4, 8, MAX_CACHE_SIZE] {
+                let layout = Layout::from_size_align(*s, *a).unwrap();
+                let it = chain.find(layout).unwrap();
+
+                assert!(*s <= it.size());
+                assert!(*a <= it.size());
+            }
+        }
+    }
+
+    #[test]
+    fn find_fails_too_large_layout() {
+        let mut chain = CacheChain::default();
+        let mut err_check = |size, align| {
+            let layout = Layout::from_size_align(size, align).unwrap();
+            let it = chain.find(layout);
+            assert!(it.is_none());
+        };
+
+        for s in &[1, 7, 8, 9, 15, 16, 17, MAX_CACHE_SIZE, MAX_CACHE_SIZE + 1] {
+            err_check(*s, 2 * MAX_CACHE_SIZE);
+        }
+
+        for a in &[2, 4, 8, 16, MAX_CACHE_SIZE, 2 * MAX_CACHE_SIZE] {
+            err_check(MAX_CACHE_SIZE + 1, *a);
+        }
     }
 }
