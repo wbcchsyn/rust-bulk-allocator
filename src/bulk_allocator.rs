@@ -32,9 +32,8 @@
 use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
-use crate::{MAX_CACHE_SIZE, MEMORY_CHUNK_LAYOUT, MIN_CACHE_SIZE};
+use crate::MEMORY_CHUNK_LAYOUT;
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
-use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
 use std::alloc::Global;
@@ -102,19 +101,11 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
         match self.pool.find(layout) {
             // Too large for the pool
             None => self.backend.alloc(layout, init),
-            Some(mut index) => match index.item().pop() {
+            Some(index) => match self.pool.pop(index) {
                 // No cache is pooled.
-                None => unsafe {
-                    let layout = Layout::from_size_align_unchecked(index.size(), index.size());
-                    self.backend.alloc(layout, init)
-                },
+                None => self.backend.alloc(index.layout(), init),
                 // Cache is pooled.
-                Some(ptr) => {
-                    let block = MemoryBlock {
-                        ptr: ptr.cast::<u8>(),
-                        size: index.size(),
-                    };
-
+                Some(block) => {
                     // Fill the block with 0 if necessary
                     if init == AllocInit::Zeroed {
                         unsafe {
@@ -134,7 +125,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
             // Too large to cache
             None => self.backend.dealloc(ptr, layout),
             // Cache the memory
-            Some(mut index) => index.item().push(ptr),
+            Some(index) => self.pool.push(ptr, index),
         }
     }
 }
@@ -142,6 +133,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
 
     const SIZES: [usize; 10] = [
         1,
