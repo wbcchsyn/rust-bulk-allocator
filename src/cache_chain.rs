@@ -79,6 +79,21 @@ impl CacheChain {
     }
 }
 
+fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
+    debug_assert!(count <= block.size);
+
+    let fst = MemoryBlock {
+        ptr: block.ptr,
+        size: count,
+    };
+    let snd = MemoryBlock {
+        ptr: unsafe { NonNull::new_unchecked(((block.ptr.as_ptr() as usize) + count) as *mut u8) },
+        size: block.size - count,
+    };
+
+    (fst, snd)
+}
+
 #[derive(Copy, Clone)]
 pub struct CacheChainIter {
     index_: i32,
