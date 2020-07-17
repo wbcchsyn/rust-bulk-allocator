@@ -29,9 +29,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::alloc::AllocRef;
+use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
+use core::ptr::NonNull;
+use core::result::Result;
 
 pub enum Backend<'a, B: AllocRef> {
     Borrowed(&'a mut B),
     Owned(B),
+}
+
+unsafe impl<B> AllocRef for Backend<'_, B>
+where
+    B: AllocRef,
+{
+    fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+        match self {
+            Self::Borrowed(b) => b.alloc(layout, init),
+            Self::Owned(b) => b.alloc(layout, init),
+        }
+    }
+
+    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+        match self {
+            Self::Borrowed(b) => b.dealloc(ptr, layout),
+            Self::Owned(b) => b.dealloc(ptr, layout),
+        }
+    }
 }
