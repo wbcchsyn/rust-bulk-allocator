@@ -92,7 +92,8 @@ impl CacheChainIter {
         self.index_ as usize
     }
 
-    pub fn size(&self) -> usize {
+    fn size(&self) -> usize {
+        debug_assert_eq!(1, self.size_.count_ones());
         debug_assert!((MIN_CACHE_SIZE as i32) <= self.size_);
         debug_assert!(self.size_ <= (MAX_CACHE_SIZE as i32));
         self.size_ as usize
