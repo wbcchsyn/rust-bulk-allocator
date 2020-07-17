@@ -32,6 +32,7 @@
 #![feature(allocator_api)]
 
 mod backend;
+mod bulk_allocator;
 mod cache_chain;
 mod ptr_list;
 
