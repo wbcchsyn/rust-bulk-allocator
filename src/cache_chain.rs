@@ -147,6 +147,20 @@ impl<'a> Iterator for CacheChainIterMut<'a> {
     }
 }
 
+impl<'a> DoubleEndedIterator for CacheChainIterMut<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.index_ < 0 {
+            None
+        } else {
+            let ret = *self;
+            self.index_ -= 1;
+            debug_assert_eq!(0, self.size_ % 2);
+            self.size_ /= 2;
+            Some(ret)
+        }
+    }
+}
+
 impl CacheChainIterMut<'_> {
     pub fn item(&mut self) -> &mut PtrList {
         let ptr = (self.item_.as_ptr() as usize) + (size_of::<PtrList>() * self.index());
@@ -223,5 +237,30 @@ mod tests {
         let last = chain.iter_mut().last().unwrap();
         assert_eq!(CHAIN_LENGTH - 1, last.index());
         assert_eq!(MAX_CACHE_SIZE, last.size());
+    }
+
+    #[test]
+    fn reverse_mut_iterator_count() {
+        let mut chain = CacheChain::default();
+        let mut it = chain.iter_mut();
+
+        // Move to the end
+        it.nth(CHAIN_LENGTH - 1);
+        assert!(it.next().is_none());
+
+        // Move to the last item
+        it.next_back();
+
+        let it = it.rev();
+        assert_eq!(CHAIN_LENGTH, it.count());
+    }
+
+    #[test]
+    fn reverse_mut_iterator_last_item() {
+        let mut chain = CacheChain::default();
+        let last = chain.iter_mut().rev().last().unwrap();
+
+        assert_eq!(0, last.index());
+        assert_eq!(MIN_CACHE_SIZE, last.size());
     }
 }
