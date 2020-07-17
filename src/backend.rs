@@ -32,6 +32,7 @@
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::ptr::NonNull;
 use core::result::Result;
+use std::alloc::Global;
 
 pub enum Backend<'a, B: AllocRef> {
     Borrowed(&'a mut B),
@@ -54,5 +55,11 @@ where
             Self::Borrowed(b) => b.dealloc(ptr, layout),
             Self::Owned(b) => b.dealloc(ptr, layout),
         }
+    }
+}
+
+impl Default for Backend<'static, Global> {
+    fn default() -> Self {
+        Self::Owned(Global::default())
     }
 }
