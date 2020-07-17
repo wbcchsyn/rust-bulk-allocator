@@ -97,6 +97,10 @@ impl CacheChainIter {
         debug_assert!(self.size_ <= (MAX_CACHE_SIZE as i32));
         self.size_ as usize
     }
+
+    pub fn layout(&self) -> Layout {
+        unsafe { Layout::from_size_align_unchecked(self.size(), self.size()) }
+    }
 }
 
 impl Iterator for CacheChainIter {
