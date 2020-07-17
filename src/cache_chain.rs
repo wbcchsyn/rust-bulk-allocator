@@ -52,7 +52,7 @@ impl Default for CacheChain {
 }
 
 impl CacheChain {
-    pub fn iter(&self) -> CacheChainIter {
+    fn iter(&self) -> CacheChainIter {
         CacheChainIter {
             index_: 0,
             size_: MIN_CACHE_SIZE as i32,
