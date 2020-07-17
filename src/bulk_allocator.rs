@@ -61,6 +61,16 @@ impl Default for BulkAllocator<'static, Global> {
     }
 }
 
+impl<B: AllocRef> From<B> for BulkAllocator<'static, B> {
+    fn from(backend: B) -> Self {
+        Self {
+            pool: Default::default(),
+            to_free: Default::default(),
+            backend: From::from(backend),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -68,5 +78,11 @@ mod tests {
     #[test]
     fn default_constructor() {
         let _ = BulkAllocator::<'static, Global>::default();
+    }
+
+    #[test]
+    fn move_constructor() {
+        let global = Global::default();
+        let _ = BulkAllocator::<'static, Global>::from(global);
     }
 }
