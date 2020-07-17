@@ -104,10 +104,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
             None => self.backend.alloc(layout, init),
             Some(index) => match self.pool.pop(index) {
                 // No cache is pooled.
-                None => unsafe {
-                    let layout = Layout::from_size_align_unchecked(index.size(), index.size());
-                    self.backend.alloc(layout, init)
-                },
+                None => self.backend.alloc(index.layout(), init),
                 // Cache is pooled.
                 Some(block) => {
                     // Fill the block with 0 if necessary
