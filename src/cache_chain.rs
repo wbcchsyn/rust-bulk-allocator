@@ -69,9 +69,9 @@ impl CacheChain {
         }
     }
 
-    pub fn find(&mut self, layout: Layout) -> Option<CacheChainIterMut> {
+    pub fn find(&self, layout: Layout) -> Option<CacheChainIter> {
         let target = core::cmp::max(layout.size(), layout.align());
-        self.iter_mut().find(|x| target <= x.size())
+        self.iter().find(|x| target <= x.size())
     }
 
     pub fn pop(&mut self, index: CacheChainIter) -> Option<MemoryBlock> {

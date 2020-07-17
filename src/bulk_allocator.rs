@@ -102,19 +102,14 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
         match self.pool.find(layout) {
             // Too large for the pool
             None => self.backend.alloc(layout, init),
-            Some(mut index) => match index.item().pop() {
+            Some(index) => match self.pool.pop(index) {
                 // No cache is pooled.
                 None => unsafe {
                     let layout = Layout::from_size_align_unchecked(index.size(), index.size());
                     self.backend.alloc(layout, init)
                 },
                 // Cache is pooled.
-                Some(ptr) => {
-                    let block = MemoryBlock {
-                        ptr: ptr.cast::<u8>(),
-                        size: index.size(),
-                    };
-
+                Some(block) => {
                     // Fill the block with 0 if necessary
                     if init == AllocInit::Zeroed {
                         unsafe {
@@ -134,7 +129,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
             // Too large to cache
             None => self.backend.dealloc(ptr, layout),
             // Cache the memory
-            Some(mut index) => index.item().push(ptr),
+            Some(index) => self.pool.push(ptr, index),
         }
     }
 }
