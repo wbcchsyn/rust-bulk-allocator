@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn find_works() {
-        let mut chain = CacheChain::default();
+        let chain = CacheChain::default();
 
         for s in &[1, 7, 8, 9, MAX_CACHE_SIZE - 1, MAX_CACHE_SIZE] {
             for a in &[2, 4, 8, MAX_CACHE_SIZE] {
@@ -194,8 +194,8 @@ mod tests {
 
     #[test]
     fn find_fails_too_large_layout() {
-        let mut chain = CacheChain::default();
-        let mut err_check = |size, align| {
+        let chain = CacheChain::default();
+        let err_check = |size, align| {
             let layout = Layout::from_size_align(size, align).unwrap();
             let it = chain.find(layout);
             assert!(it.is_none());
