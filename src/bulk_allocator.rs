@@ -99,7 +99,33 @@ impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
 unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
     /// ToDo: Implement later
     fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
-        self.backend.alloc(layout, init)
+        match self.pool.find(layout) {
+            // Too large for the pool
+            None => self.backend.alloc(layout, init),
+            Some(mut index) => match index.item().pop() {
+                // No cache is pooled.
+                None => unsafe {
+                    let layout = Layout::from_size_align_unchecked(index.size(), index.size());
+                    self.backend.alloc(layout, init)
+                },
+                // Cache is pooled.
+                Some(ptr) => {
+                    let block = MemoryBlock {
+                        ptr: ptr.cast::<u8>(),
+                        size: index.size(),
+                    };
+
+                    // Fill the block with 0 if necessary
+                    if init == AllocInit::Zeroed {
+                        unsafe {
+                            core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
+                        }
+                    }
+
+                    Ok(block)
+                }
+            },
+        }
     }
 
     unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
