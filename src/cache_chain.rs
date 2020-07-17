@@ -52,7 +52,7 @@ impl Default for CacheChain {
 }
 
 impl CacheChain {
-    fn iter(&self) -> CacheChainIter {
+    pub fn iter(&self) -> CacheChainIter {
         CacheChainIter {
             body: &self.caches,
             index_: 0,
@@ -60,7 +60,7 @@ impl CacheChain {
         }
     }
 
-    fn iter_mut(&mut self) -> CacheChainIterMut {
+    pub fn iter_mut(&mut self) -> CacheChainIterMut {
         CacheChainIterMut {
             item_: unsafe { NonNull::new_unchecked(&mut self.caches[0]) },
             index_: 0,
