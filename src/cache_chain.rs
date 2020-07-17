@@ -32,7 +32,6 @@
 use crate::ptr_list::PtrList;
 use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{Layout, MemoryBlock};
-use core::mem::size_of;
 use core::ptr::NonNull;
 
 const CHAIN_LENGTH: usize =
