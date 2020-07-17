@@ -31,7 +31,7 @@
 
 use crate::ptr_list::PtrList;
 use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
-use core::alloc::Layout;
+use core::alloc::{Layout, MemoryBlock};
 use core::mem::size_of;
 use core::ptr::NonNull;
 
@@ -72,6 +72,16 @@ impl CacheChain {
     pub fn find(&mut self, layout: Layout) -> Option<CacheChainIterMut> {
         let target = core::cmp::max(layout.size(), layout.align());
         self.iter_mut().find(|x| target <= x.size())
+    }
+
+    pub fn pop(&mut self, index: CacheChainIter) -> Option<MemoryBlock> {
+        match self.caches[index.index()].pop() {
+            None => None,
+            Some(ptr) => Some(MemoryBlock {
+                ptr: ptr.cast::<u8>(),
+                size: index.size(),
+            }),
+        }
     }
 
     pub fn push(&mut self, ptr: NonNull<u8>, index: CacheChainIter) {
