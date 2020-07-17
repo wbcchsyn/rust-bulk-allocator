@@ -29,21 +29,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(allocator_api)]
-
-mod backend;
-mod bulk_allocator;
-mod cache_chain;
-mod ptr_list;
-
+use crate::backend::Backend;
+use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
-use core::alloc::Layout;
-use core::mem::size_of;
+use core::alloc::AllocRef;
 
-/// The maximum memory size BulkAllocator::alloc() uses the cache.
-pub const MAX_CACHE_SIZE: usize = 1024;
-/// The minimum memory size BulkAllocator::alloc() returns.
-pub const MIN_CACHE_SIZE: usize = size_of::<PtrList>();
-/// Layout of memory chunk BulkAllocator acquires from the backend.
-pub const MEMORY_CHUNK_LAYOUT: Layout =
-    unsafe { Layout::from_size_align_unchecked(MAX_CACHE_SIZE * 8, MIN_CACHE_SIZE) };
+/// BulkAllocator pools allocated memory and frees it on the destruction.
+///
+/// alloc() delegates the request to the backend if the requested layout is too
+/// large to cache; otherwise, it dispatches the pooled memory and return. If no
+/// memory is pooled, acquire memory chunk from the backend.
+///
+/// dealloc() delegates the request to the backend if the requested layout is too
+/// large to cache; otherwise, it pools the passed memory.
+pub struct BulkAllocator<'a, B: 'a + AllocRef> {
+    pool: CacheChain,
+    // Memory chunks to be freed on the destruction.
+    to_free: PtrList,
+    // Backend allocator
+    backend: Backend<'a, B>,
+}
