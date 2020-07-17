@@ -64,6 +64,18 @@ impl PtrList {
 
         self.next = Some(ptr);
     }
+
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        let mut next = self.next;
+        let mut ret = 0;
+        while next.is_some() {
+            next = unsafe { next.unwrap().as_ref().next };
+            ret += 1;
+        }
+
+        ret
+    }
 }
 
 #[cfg(test)]
