@@ -131,6 +131,10 @@ impl CacheChainIter {
         self.size_ as usize
     }
 
+    fn is_end(&self) -> bool {
+        self.index_ < 0 || (CHAIN_LENGTH as i32) <= self.index_
+    }
+
     pub fn layout(&self) -> Layout {
         unsafe { Layout::from_size_align_unchecked(self.size(), self.size()) }
     }
