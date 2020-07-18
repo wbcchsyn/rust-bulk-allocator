@@ -37,8 +37,9 @@ mod cache_chain;
 mod ptr_list;
 
 use crate::ptr_list::PtrList;
-use core::alloc::Layout;
+use core::alloc::{Layout, MemoryBlock};
 use core::mem::size_of;
+use core::ptr::NonNull;
 
 /// The maximum memory size BulkAllocator::alloc() uses the cache.
 pub const MAX_CACHE_SIZE: usize = 1024;
@@ -47,3 +48,18 @@ pub const MIN_CACHE_SIZE: usize = size_of::<PtrList>();
 /// Layout of memory chunk BulkAllocator acquires from the backend.
 pub const MEMORY_CHUNK_LAYOUT: Layout =
     unsafe { Layout::from_size_align_unchecked(MAX_CACHE_SIZE * 8, MIN_CACHE_SIZE) };
+
+fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
+    debug_assert!(count <= block.size);
+
+    let fst = MemoryBlock {
+        ptr: block.ptr,
+        size: count,
+    };
+    let snd = MemoryBlock {
+        ptr: unsafe { NonNull::new_unchecked(((block.ptr.as_ptr() as usize) + count) as *mut u8) },
+        size: block.size - count,
+    };
+
+    (fst, snd)
+}

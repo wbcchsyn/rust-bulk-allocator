@@ -30,6 +30,7 @@
 // limitations under the License.
 
 use crate::ptr_list::PtrList;
+use crate::split_memory_block;
 use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{Layout, MemoryBlock};
 use core::ptr::NonNull;
@@ -141,21 +142,6 @@ fn is_fit_size(layout: Layout, size: usize) -> bool {
 
 fn is_fit(layout: Layout, block: MemoryBlock) -> bool {
     is_fit_size(layout, block.size) && is_fit_align(layout, block.ptr)
-}
-
-fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
-    debug_assert!(count <= block.size);
-
-    let fst = MemoryBlock {
-        ptr: block.ptr,
-        size: count,
-    };
-    let snd = MemoryBlock {
-        ptr: unsafe { NonNull::new_unchecked(((block.ptr.as_ptr() as usize) + count) as *mut u8) },
-        size: block.size - count,
-    };
-
-    (fst, snd)
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
