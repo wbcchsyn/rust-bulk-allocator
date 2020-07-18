@@ -36,6 +36,7 @@ mod bulk_allocator;
 mod cache_chain;
 mod ptr_list;
 
+pub use crate::bulk_allocator::BulkAllocator;
 use crate::ptr_list::PtrList;
 use core::alloc::{Layout, MemoryBlock};
 use core::mem::size_of;
