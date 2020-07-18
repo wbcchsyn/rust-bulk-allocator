@@ -32,8 +32,10 @@
 use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
+use crate::split_memory_block;
 use crate::MEMORY_CHUNK_LAYOUT;
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
+use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
 use std::alloc::Global;
@@ -101,21 +103,33 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
         match self.pool.find(layout) {
             // Too large for the pool
             None => self.backend.alloc(layout, init),
-            Some(index) => match self.pool.pop(index) {
-                // No cache is pooled.
-                None => self.backend.alloc(index.layout(), init),
-                // Cache is pooled.
-                Some(block) => {
-                    // Fill the block with 0 if necessary
-                    if init == AllocInit::Zeroed {
-                        unsafe {
-                            core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
-                        }
-                    }
+            Some(index) => {
+                let block = match self.pool.pop(index) {
+                    None => {
+                        // Make cache and try again
+                        let chunk = self
+                            .backend
+                            .alloc(MEMORY_CHUNK_LAYOUT, AllocInit::Uninitialized)?;
+                        let (to_free, block) = split_memory_block(chunk, size_of::<PtrList>());
 
-                    Ok(block)
+                        self.to_free.push(to_free.ptr);
+                        self.pool.fill_cache(block);
+
+                        self.pool.pop(index).unwrap()
+                    }
+                    // Cache is pooled.
+                    Some(block) => block,
+                };
+
+                // Fill the block with 0 if necessary
+                if init == AllocInit::Zeroed {
+                    unsafe {
+                        core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
+                    }
                 }
-            },
+
+                Ok(block)
+            }
         }
     }
 
