@@ -96,6 +96,19 @@ impl CacheChain {
     }
 }
 
+fn is_fit_align<T>(layout: Layout, ptr: NonNull<T>) -> bool {
+    let ptr = ptr.as_ptr() as usize;
+    ptr % layout.align() == 0
+}
+
+fn is_fit_size(layout: Layout, size: usize) -> bool {
+    layout.size() <= size
+}
+
+fn is_fit(layout: Layout, block: MemoryBlock) -> bool {
+    is_fit_size(layout, block.size) && is_fit_align(layout, block.ptr)
+}
+
 fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
     debug_assert!(count <= block.size);
 
