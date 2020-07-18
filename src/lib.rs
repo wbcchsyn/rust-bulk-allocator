@@ -46,6 +46,11 @@ pub const MAX_CACHE_SIZE: usize = 1024;
 /// The minimum memory size BulkAllocator::alloc() returns.
 pub const MIN_CACHE_SIZE: usize = size_of::<PtrList>();
 /// Layout of memory chunk BulkAllocator acquires from the backend.
+//
+// The size must be 2 * MAX_CACHE_SIZE or larger; otherwise, BulkAllocator
+// doesn't always make cache for MAX_CACHE_SIZE.
+//
+// I am not sure how the backend behaves when the align is very large.
 pub const MEMORY_CHUNK_LAYOUT: Layout =
     unsafe { Layout::from_size_align_unchecked(MAX_CACHE_SIZE * 8, MIN_CACHE_SIZE) };
 
