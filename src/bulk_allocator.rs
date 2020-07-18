@@ -144,6 +144,13 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
     }
 }
 
+impl<B: AllocRef> BulkAllocator<'_, B> {
+    #[cfg(test)]
+    fn memory_chunk_count(&self) -> usize {
+        self.to_free.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,6 +243,53 @@ mod tests {
 
         for &l in &LARGE_LAYOUTS {
             check(l.size(), l.align());
+        }
+    }
+
+    #[test]
+    fn allocate_one_chunk_count() {
+        let mut alloc = BulkAllocator::default();
+        assert_eq!(0, alloc.memory_chunk_count());
+
+        // Too large layouts doesn't affect to the chunk.
+        for &l in &LARGE_LAYOUTS {
+            alloc.alloc(l, AllocInit::Zeroed).unwrap();
+            assert_eq!(0, alloc.memory_chunk_count());
+        }
+
+        // One memory chunk is enough to pool for the following requests.
+        for &s in &SIZES {
+            let layout = Layout::from_size_align(s, 2).unwrap();
+            alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+            assert_eq!(1, alloc.memory_chunk_count());
+        }
+
+        // It make no difference to call alloc() and dealloc() many times.
+        for _ in 0..1024 {
+            let layout = Layout::from_size_align(MAX_CACHE_SIZE, MAX_CACHE_SIZE).unwrap();
+            let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+            assert_eq!(1, alloc.memory_chunk_count());
+            unsafe { alloc.dealloc(block.ptr, layout) };
+        }
+
+        // Too large layouts doesn't affect to the chunk again.
+        for &l in &LARGE_LAYOUTS {
+            alloc.alloc(l, AllocInit::Zeroed).unwrap();
+            assert_eq!(1, alloc.memory_chunk_count());
+        }
+    }
+
+    #[test]
+    fn allocate_many_chunks() {
+        let mut alloc = BulkAllocator::default();
+        let layout = Layout::from_size_align(MAX_CACHE_SIZE, MAX_CACHE_SIZE).unwrap();
+        let alloc_per_chunk = (MEMORY_CHUNK_LAYOUT.size() - size_of::<PtrList>()) / MAX_CACHE_SIZE;
+
+        for i in 1..8 {
+            for _ in 0..alloc_per_chunk {
+                alloc.alloc(layout, AllocInit::Uninitialized).unwrap();
+                assert_eq!(i, alloc.memory_chunk_count());
+            }
         }
     }
 }
