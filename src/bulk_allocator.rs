@@ -38,7 +38,6 @@ use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
-use std::alloc::Global;
 
 /// BulkAllocator pools allocated memory and frees it on the destruction.
 ///
@@ -67,7 +66,10 @@ impl<B: AllocRef> BulkAllocator<'_, B> {
         unsafe { Layout::from_size_align_unchecked(MAX_CACHE_SIZE * 8, MIN_CACHE_SIZE) };
 }
 
-impl Default for BulkAllocator<'static, Global> {
+impl<B> Default for BulkAllocator<'static, B>
+where
+    B: AllocRef + Default,
+{
     fn default() -> Self {
         Self {
             pool: Default::default(),
@@ -169,6 +171,7 @@ impl<B: AllocRef> BulkAllocator<'_, B> {
 mod tests {
     use super::*;
     use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
+    use std::alloc::Global;
 
     const SIZES: [usize; 10] = [
         1,
@@ -210,7 +213,7 @@ mod tests {
 
     #[test]
     fn alloc_and_dealloc_works() {
-        let mut alloc = BulkAllocator::default();
+        let mut alloc = BulkAllocator::<'static, Global>::default();
 
         let mut check = |size, align| {
             let layout = Layout::from_size_align(size, align).unwrap();
@@ -262,7 +265,7 @@ mod tests {
 
     #[test]
     fn allocate_one_chunk_count() {
-        let mut alloc = BulkAllocator::default();
+        let mut alloc = BulkAllocator::<'static, Global>::default();
         assert_eq!(0, alloc.memory_chunk_count());
 
         // Too large layouts doesn't affect to the chunk.
@@ -295,7 +298,7 @@ mod tests {
 
     #[test]
     fn allocate_many_chunks() {
-        let mut alloc = BulkAllocator::default();
+        let mut alloc = BulkAllocator::<'static, Global>::default();
         let layout = Layout::from_size_align(MAX_CACHE_SIZE, MAX_CACHE_SIZE).unwrap();
         let alloc_per_chunk = (BulkAllocator::<Global>::MEMORY_CHUNK_LAYOUT.size()
             - size_of::<PtrList>())
