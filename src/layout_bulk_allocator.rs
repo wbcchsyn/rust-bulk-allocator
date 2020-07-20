@@ -41,3 +41,29 @@ pub struct LayoutBulkAllocator<'a, B: 'a + AllocRef> {
     // Backend allocator
     backend: Backend<'a, B>,
 }
+
+impl<B> LayoutBulkAllocator<'static, B>
+where
+    B: AllocRef + Default,
+{
+    pub fn from_layout(layout: Layout) -> Self {
+        Self {
+            layout,
+            pool: Default::default(),
+            to_free: Default::default(),
+            backend: Default::default(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::alloc::Global;
+
+    #[test]
+    fn from_layout_constructor() {
+        let layout = Layout::from_size_align(35, 16).unwrap();
+        let _ = LayoutBulkAllocator::<'static, Global>::from_layout(layout);
+    }
+}
