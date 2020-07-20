@@ -38,6 +38,7 @@ use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// BulkAllocator pools allocated memory and frees it on the destruction.
 ///
@@ -104,6 +105,12 @@ where
 
 impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
     fn drop(&mut self) {
+        // Guarantees to deallocate the memory chunks only after the program finished
+        // using memories self.alloc() returned.
+        // (I am afraid of optimization.)
+        let barrier = AtomicBool::new(false);
+        barrier.load(Ordering::SeqCst);
+
         while let Some(ptr) = self.to_free.pop() {
             unsafe {
                 self.backend
