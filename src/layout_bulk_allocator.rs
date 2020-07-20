@@ -33,6 +33,7 @@ use crate::backend::Backend;
 use crate::ptr_list::PtrList;
 use crate::MEMORY_CHUNK_SIZE;
 use core::alloc::{AllocRef, Layout};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct LayoutBulkAllocator<'a, B: 'a + AllocRef> {
     layout: Layout,
@@ -75,6 +76,23 @@ impl<'a, B: 'a + AllocRef> LayoutBulkAllocator<'a, B> {
             pool: Default::default(),
             to_free: Default::default(),
             backend: Backend::from(backend),
+        }
+    }
+}
+
+impl<B: AllocRef> Drop for LayoutBulkAllocator<'_, B> {
+    fn drop(&mut self) {
+        // Guarantees to deallocate the memory chunks only after the program finished
+        // using memories self.alloc() returned.
+        // (I am afraid of optimization.)
+        let barrier = AtomicBool::new(false);
+        barrier.load(Ordering::SeqCst);
+
+        while let Some(ptr) = self.to_free.pop() {
+            unsafe {
+                self.backend
+                    .dealloc(ptr.cast::<u8>(), self.memory_chunk_layout());
+            }
         }
     }
 }
