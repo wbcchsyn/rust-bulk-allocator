@@ -31,6 +31,7 @@
 
 use crate::backend::Backend;
 use crate::ptr_list::PtrList;
+use crate::MEMORY_CHUNK_SIZE;
 use core::alloc::{AllocRef, Layout};
 
 pub struct LayoutBulkAllocator<'a, B: 'a + AllocRef> {
@@ -75,6 +76,12 @@ impl<'a, B: 'a + AllocRef> LayoutBulkAllocator<'a, B> {
             to_free: Default::default(),
             backend: Backend::from(backend),
         }
+    }
+}
+
+impl<B: AllocRef> LayoutBulkAllocator<'_, B> {
+    fn memory_chunk_layout(&self) -> Layout {
+        Layout::from_size_align(MEMORY_CHUNK_SIZE, self.layout.align()).unwrap()
     }
 }
 
