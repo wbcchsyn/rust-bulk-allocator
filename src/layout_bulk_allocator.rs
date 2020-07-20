@@ -28,37 +28,3 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-#![feature(allocator_api)]
-
-mod backend;
-mod bulk_allocator;
-mod cache_chain;
-mod layout_bulk_allocator;
-mod ptr_list;
-
-pub use crate::bulk_allocator::BulkAllocator;
-use crate::ptr_list::PtrList;
-use core::alloc::MemoryBlock;
-use core::mem::size_of;
-use core::ptr::NonNull;
-
-/// The maximum memory size BulkAllocator::alloc() uses the cache.
-pub const MAX_CACHE_SIZE: usize = 1024;
-/// The minimum memory size BulkAllocator::alloc() returns.
-const MIN_CACHE_SIZE: usize = size_of::<PtrList>();
-
-fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
-    debug_assert!(count <= block.size);
-
-    let fst = MemoryBlock {
-        ptr: block.ptr,
-        size: count,
-    };
-    let snd = MemoryBlock {
-        ptr: unsafe { NonNull::new_unchecked(((block.ptr.as_ptr() as usize) + count) as *mut u8) },
-        size: block.size - count,
-    };
-
-    (fst, snd)
-}
