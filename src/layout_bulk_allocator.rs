@@ -28,3 +28,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+use crate::backend::Backend;
+use crate::ptr_list::PtrList;
+use core::alloc::{AllocRef, Layout};
+
+pub struct LayoutBulkAllocator<'a, B: 'a + AllocRef> {
+    layout: Layout,
+    pool: PtrList,
+    // Memory chunks to be freed on the destruction.
+    to_free: PtrList,
+    // Backend allocator
+    backend: Backend<'a, B>,
+}
