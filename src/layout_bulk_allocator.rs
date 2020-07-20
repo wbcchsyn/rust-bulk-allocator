@@ -67,6 +67,17 @@ impl<B: AllocRef> LayoutBulkAllocator<'static, B> {
     }
 }
 
+impl<'a, B: 'a + AllocRef> LayoutBulkAllocator<'a, B> {
+    pub fn from_layout_mut_backend(layout: Layout, backend: &'a mut B) -> Self {
+        Self {
+            layout,
+            pool: Default::default(),
+            to_free: Default::default(),
+            backend: Backend::from(backend),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,5 +94,12 @@ mod tests {
         let layout = Layout::from_size_align(64, 32).unwrap();
         let global = Default::default();
         let _ = LayoutBulkAllocator::<'static, Global>::from_layout_backend(layout, global);
+    }
+
+    #[test]
+    fn from_layout_mut_backend_constructor() {
+        let layout = Layout::from_size_align(64, 32).unwrap();
+        let mut global = Default::default();
+        let _ = LayoutBulkAllocator::<'_, Global>::from_layout_mut_backend(layout, &mut global);
     }
 }
