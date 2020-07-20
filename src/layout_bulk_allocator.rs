@@ -56,6 +56,17 @@ where
     }
 }
 
+impl<B: AllocRef> LayoutBulkAllocator<'static, B> {
+    pub fn from_layout_backend(layout: Layout, backend: B) -> Self {
+        Self {
+            layout,
+            pool: Default::default(),
+            to_free: Default::default(),
+            backend: Backend::from(backend),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -65,5 +76,12 @@ mod tests {
     fn from_layout_constructor() {
         let layout = Layout::from_size_align(35, 16).unwrap();
         let _ = LayoutBulkAllocator::<'static, Global>::from_layout(layout);
+    }
+
+    #[test]
+    fn from_layout_backend_constructor() {
+        let layout = Layout::from_size_align(64, 32).unwrap();
+        let global = Default::default();
+        let _ = LayoutBulkAllocator::<'static, Global>::from_layout_backend(layout, global);
     }
 }
