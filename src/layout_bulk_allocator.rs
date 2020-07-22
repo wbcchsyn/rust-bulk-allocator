@@ -31,6 +31,7 @@
 
 use crate::backend::Backend;
 use crate::ptr_list::PtrList;
+use crate::split_memory_block;
 use crate::MEMORY_CHUNK_SIZE;
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::ptr::NonNull;
@@ -104,24 +105,35 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
         if layout != self.layout {
             self.backend.alloc(layout, init)
         } else {
-            match self.pool.pop() {
-                None => self.backend.alloc(layout, init),
-                Some(ptr) => {
-                    let block = MemoryBlock {
-                        ptr: ptr.cast::<u8>(),
-                        size: layout.size(),
-                    };
+            let size = layout.pad_to_align().size();
+            let mut ptr = self.pool.pop();
 
-                    // Fill the block with 0 if necessary
-                    if init == AllocInit::Zeroed {
-                        unsafe {
-                            core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
-                        }
-                    }
+            if ptr.is_none() {
+                let mut block = self
+                    .backend
+                    .alloc(self.memory_chunk_layout(), AllocInit::Uninitialized)?;
+                for _ in 0..(block.size / size) {
+                    let (f, s) = split_memory_block(block, size);
+                    block = s;
+                    self.pool.push(f.ptr);
+                }
 
-                    Ok(block)
+                ptr = self.pool.pop();
+            }
+
+            let block = MemoryBlock {
+                ptr: ptr.unwrap().cast::<u8>(),
+                size,
+            };
+
+            // Fill the block with 0 if necessary
+            if init == AllocInit::Zeroed {
+                unsafe {
+                    core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
                 }
             }
+
+            Ok(block)
         }
     }
 
