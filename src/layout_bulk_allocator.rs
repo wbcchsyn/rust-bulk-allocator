@@ -32,8 +32,9 @@
 use crate::backend::Backend;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
-use crate::MEMORY_CHUNK_SIZE;
+use crate::{MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
+use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -92,9 +93,15 @@ impl<B: AllocRef> Drop for LayoutBulkAllocator<'_, B> {
         barrier.load(Ordering::SeqCst);
 
         while let Some(ptr) = self.to_free.pop() {
+            // move ptr to the first position of the chunk.
+            let ptr = ptr.as_ptr() as usize;
+            let ptr = ptr + size_of::<PtrList>() - self.memory_chunk_layout().size();
+
             unsafe {
-                self.backend
-                    .dealloc(ptr.cast::<u8>(), self.memory_chunk_layout());
+                self.backend.dealloc(
+                    NonNull::new_unchecked(ptr as *mut u8),
+                    self.memory_chunk_layout(),
+                );
             }
         }
     }
@@ -105,14 +112,28 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
         if layout != self.layout {
             self.backend.alloc(layout, init)
         } else {
-            let size = layout.pad_to_align().size();
+            let size = core::cmp::max(MIN_CACHE_SIZE, layout.pad_to_align().size());
+
+            // Try to fetch the cache.
             let mut ptr = self.pool.pop();
 
+            // Make cache and try again.
             if ptr.is_none() {
                 let mut block = self
                     .backend
                     .alloc(self.memory_chunk_layout(), AllocInit::Uninitialized)?;
-                for _ in 0..(block.size / size) {
+
+                {
+                    let first_size = self.memory_chunk_layout().size() - size_of::<PtrList>();
+                    let (f, s) = split_memory_block(block, first_size);
+
+                    debug_assert!(size_of::<PtrList>() <= s.size);
+                    self.to_free.push(s.ptr);
+                    block = f;
+                }
+
+                // Dispatch and pool the first space.
+                while size <= block.size {
                     let (f, s) = split_memory_block(block, size);
                     block = s;
                     self.pool.push(f.ptr);
