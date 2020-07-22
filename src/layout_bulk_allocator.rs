@@ -101,7 +101,28 @@ impl<B: AllocRef> Drop for LayoutBulkAllocator<'_, B> {
 
 unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
     fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
-        self.backend.alloc(layout, init)
+        if layout != self.layout {
+            self.backend.alloc(layout, init)
+        } else {
+            match self.pool.pop() {
+                None => self.backend.alloc(layout, init),
+                Some(ptr) => {
+                    let block = MemoryBlock {
+                        ptr: ptr.cast::<u8>(),
+                        size: layout.size(),
+                    };
+
+                    // Fill the block with 0 if necessary
+                    if init == AllocInit::Zeroed {
+                        unsafe {
+                            core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
+                        }
+                    }
+
+                    Ok(block)
+                }
+            }
+        }
     }
 
     unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
