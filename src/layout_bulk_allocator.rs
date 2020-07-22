@@ -105,7 +105,11 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
     }
 
     unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
-        self.backend.dealloc(ptr, layout)
+        if layout == self.layout {
+            self.pool.push(ptr);
+        } else {
+            self.backend.dealloc(ptr, layout);
+        }
     }
 }
 
