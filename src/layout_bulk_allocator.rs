@@ -32,7 +32,9 @@
 use crate::backend::Backend;
 use crate::ptr_list::PtrList;
 use crate::MEMORY_CHUNK_SIZE;
-use core::alloc::{AllocRef, Layout};
+use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
+use core::ptr::NonNull;
+use core::result::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct LayoutBulkAllocator<'a, B: 'a + AllocRef> {
@@ -97,6 +99,16 @@ impl<B: AllocRef> Drop for LayoutBulkAllocator<'_, B> {
     }
 }
 
+unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
+    fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+        self.backend.alloc(layout, init)
+    }
+
+    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+        self.backend.dealloc(ptr, layout)
+    }
+}
+
 impl<B: AllocRef> LayoutBulkAllocator<'_, B> {
     fn memory_chunk_layout(&self) -> Layout {
         Layout::from_size_align(MEMORY_CHUNK_SIZE, self.layout.align()).unwrap()
@@ -106,7 +118,29 @@ impl<B: AllocRef> LayoutBulkAllocator<'_, B> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
     use std::alloc::Global;
+
+    const SIZES: [usize; 10] = [
+        1,
+        2,
+        3,
+        4,
+        5,
+        MIN_CACHE_SIZE - 1,
+        MIN_CACHE_SIZE,
+        MIN_CACHE_SIZE + 1,
+        MAX_CACHE_SIZE - 1,
+        MAX_CACHE_SIZE,
+    ];
+    const ALIGNS: [usize; 4] = [2, 4, MIN_CACHE_SIZE, MAX_CACHE_SIZE];
+    const LARGE_LAYOUTS: [Layout; 3] = unsafe {
+        [
+            Layout::from_size_align_unchecked(MAX_CACHE_SIZE + 1, MAX_CACHE_SIZE),
+            Layout::from_size_align_unchecked(MAX_CACHE_SIZE, 2 * MAX_CACHE_SIZE),
+            Layout::from_size_align_unchecked(MAX_CACHE_SIZE + 1, 2 * MAX_CACHE_SIZE),
+        ]
+    };
 
     #[test]
     fn from_layout_constructor() {
@@ -126,5 +160,66 @@ mod tests {
         let layout = Layout::from_size_align(64, 32).unwrap();
         let mut global = Default::default();
         let _ = LayoutBulkAllocator::<'_, Global>::from_layout_mut_backend(layout, &mut global);
+    }
+
+    #[test]
+    fn alloc_and_dealloc_works() {
+        let build = |size, align| {
+            let layout = Layout::from_size_align(size, align).unwrap();
+            LayoutBulkAllocator::<'static, Global>::from_layout(layout)
+        };
+
+        let check = |size, align, alloc: &mut LayoutBulkAllocator<'static, Global>| {
+            let layout = Layout::from_size_align(size, align).unwrap();
+
+            // AllocInit::Uninitialized
+            {
+                let block = alloc.alloc(layout, AllocInit::Uninitialized).unwrap();
+
+                assert!(layout.size() <= block.size);
+
+                let ptr = block.ptr.as_ptr() as usize;
+                assert_eq!(0, ptr % layout.align());
+
+                unsafe {
+                    alloc.dealloc(block.ptr, layout);
+                }
+            }
+
+            // AllocInit::Zeroed
+            {
+                let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+
+                assert!(layout.size() <= block.size);
+
+                let ptr = block.ptr.as_ptr() as usize;
+                assert_eq!(0, ptr % layout.align());
+
+                unsafe {
+                    let s = core::slice::from_raw_parts(ptr as *const u8, block.size);
+                    for &u in s {
+                        assert_eq!(0, u);
+                    }
+
+                    alloc.dealloc(block.ptr, layout);
+                }
+            }
+        };
+
+        for &s in &SIZES {
+            for &a in &ALIGNS {
+                let mut alloc = build(s, a);
+
+                for &s in &SIZES {
+                    for &a in &ALIGNS {
+                        check(s, a, &mut alloc);
+                    }
+                }
+
+                for &l in &LARGE_LAYOUTS {
+                    check(l.size(), l.align(), &mut alloc);
+                }
+            }
+        }
     }
 }
