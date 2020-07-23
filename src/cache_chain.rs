@@ -105,7 +105,7 @@ impl CacheChain {
                 None => continue,
                 Some(ptr) => {
                     let mut block = MemoryBlock {
-                        ptr: ptr.cast::<u8>(),
+                        ptr,
                         size: it.size(),
                     };
 

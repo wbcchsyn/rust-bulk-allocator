@@ -43,19 +43,19 @@ impl Default for PtrList {
 }
 
 impl PtrList {
-    pub fn pop(&mut self) -> Option<NonNull<Self>> {
+    pub fn pop(&mut self) -> Option<NonNull<u8>> {
         match self.next {
             None => None,
             Some(nonnull) => {
                 unsafe {
                     self.next = nonnull.as_ref().next;
                 }
-                Some(nonnull)
+                Some(nonnull.cast::<u8>())
             }
         }
     }
 
-    pub fn push<T>(&mut self, ptr: NonNull<T>) {
+    pub fn push(&mut self, ptr: NonNull<u8>) {
         let mut ptr = ptr.cast::<Self>();
 
         unsafe {
@@ -88,8 +88,8 @@ mod tests {
         let mut fst = PtrList::default();
         let mut snd = PtrList::default();
 
-        let fst = NonNull::new(&mut fst).unwrap();
-        let snd = NonNull::new(&mut snd).unwrap();
+        let fst = NonNull::new(&mut fst).unwrap().cast::<u8>();
+        let snd = NonNull::new(&mut snd).unwrap().cast::<u8>();
 
         {
             debug_assert_eq!(None, head.pop());

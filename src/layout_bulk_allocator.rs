@@ -143,7 +143,7 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
             }
 
             let block = MemoryBlock {
-                ptr: ptr.unwrap().cast::<u8>(),
+                ptr: ptr.unwrap(),
                 size,
             };
 
