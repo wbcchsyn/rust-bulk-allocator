@@ -46,6 +46,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// pointer and alloc() returns the cache. If no memory is pooled, alloc()
 /// allocate memory chunk from the backend, and makes caches at first.
 ///
+/// Compared to `BulkAllocator` the performance of `LayoutBulkAllocator` is better than
+/// that of `BulkAllocator` as long as the argument layout of `alloc()` and `dealloc()` is
+/// same to which is passed to the constructor.
+///
 /// # Thread safety
 ///
 /// All the mutable methods are thread unsafe.

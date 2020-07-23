@@ -49,6 +49,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// dealloc() delegates the request to the backend if the requested layout is too
 /// large to cache; otherwise, it pools the passed memory.
 ///
+/// If the argument `layout` of `alloc()` is always same, probably `LayoutBulkAllocator`
+/// is better than `BulkAllocator`.
+///
 /// # Thread safety
 ///
 /// All the mutable methods are thread unsafe.
