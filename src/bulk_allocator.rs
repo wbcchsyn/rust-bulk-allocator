@@ -48,6 +48,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 ///
 /// dealloc() delegates the request to the backend if the requested layout is too
 /// large to cache; otherwise, it pools the passed memory.
+///
+/// # Thread safety
+///
+/// All the mutable methods are thread unsafe.
 pub struct BulkAllocator<'a, B: 'a + AllocRef> {
     pool: CacheChain,
     // Memory chunks to be freed on the destruction.
@@ -117,6 +121,9 @@ impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
     }
 }
 
+/// # Thread safety
+///
+/// All the methods are thread unsafe.
 unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
     /// ToDo: Implement later
     fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
