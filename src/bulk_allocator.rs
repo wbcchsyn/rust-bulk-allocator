@@ -129,7 +129,6 @@ impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
 ///
 /// All the methods are thread unsafe.
 unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
-    /// ToDo: Implement later
     fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
         match self.pool.find(layout) {
             // Too large for the pool
