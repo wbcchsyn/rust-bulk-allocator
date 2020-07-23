@@ -285,4 +285,67 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn chunk_count() {
+        let layout = Layout::from_size_align(35, 16).unwrap();
+        let mut alloc = LayoutBulkAllocator::<'static, Global>::from_layout(layout);
+
+        let size = core::cmp::max(MIN_CACHE_SIZE, layout.pad_to_align().size());
+
+        //  At first, no cache is
+        assert_eq!(0, alloc.memory_chunk_count());
+
+        // The first call of alloc() increases the chunk count.
+        let block = alloc.alloc(layout, AllocInit::Uninitialized).unwrap();
+        assert_eq!(1, alloc.memory_chunk_count());
+        unsafe {
+            alloc.dealloc(block.ptr, layout);
+        }
+
+        // Repeatable alloc()/dealloc() call won't change the chunk count.
+        for _ in 0..1024 {
+            let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+            assert_eq!(1, alloc.memory_chunk_count());
+            unsafe {
+                alloc.dealloc(block.ptr, layout);
+            }
+        }
+
+        let mut ptrs = Vec::new();
+        for i in 1..10 {
+            for _ in 0..((MEMORY_CHUNK_SIZE - size_of::<PtrList>()) / size) {
+                let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+                ptrs.push(block.ptr);
+                assert_eq!(i, alloc.memory_chunk_count());
+            }
+        }
+
+        let chunk_count = alloc.memory_chunk_count();
+
+        // If the request layout is different, the count will not be changed.
+        for &s in &SIZES {
+            for &a in &ALIGNS {
+                let layout_ = Layout::from_size_align(s, a).unwrap();
+
+                if layout == layout_ {
+                    continue;
+                }
+
+                let block = alloc.alloc(layout_, AllocInit::Uninitialized).unwrap();
+                assert_eq!(chunk_count, alloc.memory_chunk_count());
+                unsafe {
+                    alloc.dealloc(block.ptr, layout);
+                }
+            }
+        }
+
+        // Deallocation won't change the chunk count
+        for &ptr in &ptrs {
+            unsafe {
+                alloc.dealloc(ptr, layout);
+            }
+            assert_eq!(chunk_count, alloc.memory_chunk_count());
+        }
+    }
 }
