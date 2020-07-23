@@ -34,6 +34,7 @@
 mod backend;
 mod bulk_allocator;
 mod cache_chain;
+mod layout_bulk_allocator;
 mod ptr_list;
 
 pub use crate::bulk_allocator::BulkAllocator;
@@ -46,6 +47,11 @@ use core::ptr::NonNull;
 pub const MAX_CACHE_SIZE: usize = 1024;
 /// The minimum memory size BulkAllocator::alloc() returns.
 const MIN_CACHE_SIZE: usize = size_of::<PtrList>();
+/// Memory chunk size BulkAllocator allocate from the backend.
+//
+// This must equal to 2 * MAX_CACHE_SIZE or larger; otherwise BulkAllocator
+// doesn't always make cache for MAX_CACHE_SIZE.
+const MEMORY_CHUNK_SIZE: usize = 8 * MAX_CACHE_SIZE;
 
 fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
     debug_assert!(count <= block.size);

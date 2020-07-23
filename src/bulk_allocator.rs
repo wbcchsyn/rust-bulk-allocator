@@ -33,7 +33,7 @@ use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
-use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
+use crate::{MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::mem::size_of;
 use core::ptr::NonNull;
@@ -64,7 +64,7 @@ impl<B: AllocRef> BulkAllocator<'_, B> {
     //
     // I am not sure how the backend behaves when the align is very large.
     const MEMORY_CHUNK_LAYOUT: Layout =
-        unsafe { Layout::from_size_align_unchecked(MAX_CACHE_SIZE * 8, MIN_CACHE_SIZE) };
+        unsafe { Layout::from_size_align_unchecked(MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE) };
 }
 
 impl<B> Default for BulkAllocator<'static, B>
