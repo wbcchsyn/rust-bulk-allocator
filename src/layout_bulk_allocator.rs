@@ -39,6 +39,20 @@ use core::ptr::NonNull;
 use core::result::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// LayoutBulkAllocator pools allocated memory and frees it on the destruction.
+///
+/// alloc() and dealloc() delegates the request if the layout is different from
+/// what is specified to the constructor; otherwise, dealloc() caches the passed
+/// pointer and alloc() returns the cache. If no memory is pooled, alloc()
+/// allocate memory chunk from the backend, and makes caches at first.
+///
+/// # Thread safety
+///
+/// All the mutable methods are thread unsafe.
+///
+/// # Warnings
+///
+/// After drop, programer must NOT use the memories which method alloc() of this instance returned.
 pub struct LayoutBulkAllocator<'a, B: 'a + AllocRef> {
     layout: Layout,
     pool: PtrList,
@@ -107,6 +121,9 @@ impl<B: AllocRef> Drop for LayoutBulkAllocator<'_, B> {
     }
 }
 
+/// # Thread safety
+///
+/// All the methods are thread unsafe.
 unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
     fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
         if layout != self.layout {
