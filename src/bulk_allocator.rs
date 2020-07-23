@@ -112,10 +112,7 @@ impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
         barrier.load(Ordering::SeqCst);
 
         while let Some(ptr) = self.to_free.pop() {
-            unsafe {
-                self.backend
-                    .dealloc(ptr.cast::<u8>(), Self::MEMORY_CHUNK_LAYOUT)
-            }
+            unsafe { self.backend.dealloc(ptr, Self::MEMORY_CHUNK_LAYOUT) }
         }
     }
 }
