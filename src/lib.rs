@@ -38,6 +38,7 @@ mod layout_bulk_allocator;
 mod ptr_list;
 
 pub use crate::bulk_allocator::BulkAllocator;
+pub use crate::layout_bulk_allocator::LayoutBulkAllocator;
 use crate::ptr_list::PtrList;
 use core::alloc::MemoryBlock;
 use core::mem::size_of;
