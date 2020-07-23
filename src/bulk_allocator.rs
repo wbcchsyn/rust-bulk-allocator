@@ -133,6 +133,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
         match self.pool.find(layout) {
             // Too large for the pool
             None => self.backend.alloc(layout, init),
+            // Dispatch the cache and return
             Some(index) => {
                 let block = match self.pool.pop(index) {
                     None => {
