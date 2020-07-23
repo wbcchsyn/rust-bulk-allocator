@@ -32,8 +32,10 @@
 use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
+use crate::split_memory_block;
 use crate::MEMORY_CHUNK_LAYOUT;
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
+use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
 use std::alloc::Global;
@@ -101,21 +103,33 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
         match self.pool.find(layout) {
             // Too large for the pool
             None => self.backend.alloc(layout, init),
-            Some(index) => match self.pool.pop(index) {
-                // No cache is pooled.
-                None => self.backend.alloc(index.layout(), init),
-                // Cache is pooled.
-                Some(block) => {
-                    // Fill the block with 0 if necessary
-                    if init == AllocInit::Zeroed {
-                        unsafe {
-                            core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
-                        }
-                    }
+            Some(index) => {
+                let block = match self.pool.pop(index) {
+                    None => {
+                        // Make cache and try again
+                        let chunk = self
+                            .backend
+                            .alloc(MEMORY_CHUNK_LAYOUT, AllocInit::Uninitialized)?;
+                        let (to_free, block) = split_memory_block(chunk, size_of::<PtrList>());
 
-                    Ok(block)
+                        self.to_free.push(to_free.ptr);
+                        self.pool.fill_cache(block);
+
+                        self.pool.pop(index).unwrap()
+                    }
+                    // Cache is pooled.
+                    Some(block) => block,
+                };
+
+                // Fill the block with 0 if necessary
+                if init == AllocInit::Zeroed {
+                    unsafe {
+                        core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
+                    }
                 }
-            },
+
+                Ok(block)
+            }
         }
     }
 
@@ -127,6 +141,13 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
             // Cache the memory
             Some(index) => self.pool.push(ptr, index),
         }
+    }
+}
+
+impl<B: AllocRef> BulkAllocator<'_, B> {
+    #[cfg(test)]
+    fn memory_chunk_count(&self) -> usize {
+        self.to_free.len()
     }
 }
 
@@ -222,6 +243,53 @@ mod tests {
 
         for &l in &LARGE_LAYOUTS {
             check(l.size(), l.align());
+        }
+    }
+
+    #[test]
+    fn allocate_one_chunk_count() {
+        let mut alloc = BulkAllocator::default();
+        assert_eq!(0, alloc.memory_chunk_count());
+
+        // Too large layouts doesn't affect to the chunk.
+        for &l in &LARGE_LAYOUTS {
+            alloc.alloc(l, AllocInit::Zeroed).unwrap();
+            assert_eq!(0, alloc.memory_chunk_count());
+        }
+
+        // One memory chunk is enough to pool for the following requests.
+        for &s in &SIZES {
+            let layout = Layout::from_size_align(s, 2).unwrap();
+            alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+            assert_eq!(1, alloc.memory_chunk_count());
+        }
+
+        // It make no difference to call alloc() and dealloc() many times.
+        for _ in 0..1024 {
+            let layout = Layout::from_size_align(MAX_CACHE_SIZE, MAX_CACHE_SIZE).unwrap();
+            let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+            assert_eq!(1, alloc.memory_chunk_count());
+            unsafe { alloc.dealloc(block.ptr, layout) };
+        }
+
+        // Too large layouts doesn't affect to the chunk again.
+        for &l in &LARGE_LAYOUTS {
+            alloc.alloc(l, AllocInit::Zeroed).unwrap();
+            assert_eq!(1, alloc.memory_chunk_count());
+        }
+    }
+
+    #[test]
+    fn allocate_many_chunks() {
+        let mut alloc = BulkAllocator::default();
+        let layout = Layout::from_size_align(MAX_CACHE_SIZE, MAX_CACHE_SIZE).unwrap();
+        let alloc_per_chunk = (MEMORY_CHUNK_LAYOUT.size() - size_of::<PtrList>()) / MAX_CACHE_SIZE;
+
+        for i in 1..8 {
+            for _ in 0..alloc_per_chunk {
+                alloc.alloc(layout, AllocInit::Uninitialized).unwrap();
+                assert_eq!(i, alloc.memory_chunk_count());
+            }
         }
     }
 }

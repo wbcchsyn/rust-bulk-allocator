@@ -30,6 +30,7 @@
 // limitations under the License.
 
 use crate::ptr_list::PtrList;
+use crate::split_memory_block;
 use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{Layout, MemoryBlock};
 use core::ptr::NonNull;
@@ -52,7 +53,7 @@ impl Default for CacheChain {
 }
 
 impl CacheChain {
-    pub fn iter(&self) -> CacheChainIter {
+    fn iter(&self) -> CacheChainIter {
         CacheChainIter {
             index_: 0,
             size_: MIN_CACHE_SIZE as i32,
@@ -64,14 +65,65 @@ impl CacheChain {
         self.iter().find(|x| target <= x.size())
     }
 
-    pub fn pop(&mut self, index: CacheChainIter) -> Option<MemoryBlock> {
-        match self.caches[index.index()].pop() {
-            None => None,
-            Some(ptr) => Some(MemoryBlock {
-                ptr: ptr.cast::<u8>(),
-                size: index.size(),
-            }),
+    pub fn fill_cache(&mut self, mut block: MemoryBlock) {
+        let mut hint = self.iter();
+        debug_assert!(is_fit(hint.layout(), block));
+
+        let mut make_cache = |i: CacheChainIter, block: MemoryBlock| -> MemoryBlock {
+            let (f, s) = split_memory_block(block, i.size());
+            debug_assert!(is_fit(i.layout(), f));
+            self.caches[i.index()].push(f.ptr);
+            s
+        };
+
+        // Increasing the hint and make cache
+        while is_fit_size(hint.layout(), block.size) {
+            while is_fit(hint.layout(), block) {
+                hint.next();
+                if hint.is_end() {
+                    break;
+                }
+            }
+            hint.next_back();
+            block = make_cache(hint, block);
         }
+
+        // Decreasing the hint and make cache
+        while 0 < block.size {
+            while !is_fit_size(hint.layout(), block.size) {
+                hint.next_back();
+                debug_assert!(!hint.is_end());
+            }
+
+            block = make_cache(hint, block);
+        }
+    }
+
+    pub fn pop(&mut self, index: CacheChainIter) -> Option<MemoryBlock> {
+        for mut it in index {
+            match self.caches[it.index()].pop() {
+                None => continue,
+                Some(ptr) => {
+                    let mut block = MemoryBlock {
+                        ptr: ptr.cast::<u8>(),
+                        size: it.size(),
+                    };
+
+                    for _ in index.index()..it.index() {
+                        it.next_back();
+                        let (f, s) = split_memory_block(block, it.size());
+                        debug_assert_eq!(f.size, s.size);
+                        self.caches[it.index()].push(s.ptr);
+                        block = f;
+                    }
+
+                    debug_assert_eq!(index.size(), block.size);
+                    return Some(block);
+                }
+            }
+        }
+
+        None
     }
 
     pub fn push(&mut self, ptr: NonNull<u8>, index: CacheChainIter) {
@@ -79,7 +131,20 @@ impl CacheChain {
     }
 }
 
-#[derive(Copy, Clone)]
+fn is_fit_align<T>(layout: Layout, ptr: NonNull<T>) -> bool {
+    let ptr = ptr.as_ptr() as usize;
+    ptr % layout.align() == 0
+}
+
+fn is_fit_size(layout: Layout, size: usize) -> bool {
+    layout.size() <= size
+}
+
+fn is_fit(layout: Layout, block: MemoryBlock) -> bool {
+    is_fit_size(layout, block.size) && is_fit_align(layout, block.ptr)
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct CacheChainIter {
     index_: i32,
     size_: i32,
@@ -97,6 +162,10 @@ impl CacheChainIter {
         debug_assert!((MIN_CACHE_SIZE as i32) <= self.size_);
         debug_assert!(self.size_ <= (MAX_CACHE_SIZE as i32));
         self.size_ as usize
+    }
+
+    fn is_end(&self) -> bool {
+        self.index_ < 0 || (CHAIN_LENGTH as i32) <= self.index_
     }
 
     pub fn layout(&self) -> Layout {
@@ -207,6 +276,101 @@ mod tests {
 
         for a in &[2, 4, 8, 16, MAX_CACHE_SIZE, 2 * MAX_CACHE_SIZE] {
             err_check(MAX_CACHE_SIZE + 1, *a);
+        }
+    }
+
+    mod fill_cache_tests {
+        use super::*;
+
+        fn allocate(size: usize, align: usize) -> MemoryBlock {
+            let layout = Layout::from_size_align(size + align, 2 * align).unwrap();
+            let ptr = unsafe { std::alloc::alloc(layout) };
+            let ptr = (ptr as usize) + align;
+            let ptr = NonNull::new(ptr as *mut u8).unwrap();
+
+            MemoryBlock { ptr, size }
+        }
+
+        fn deallocate(block: MemoryBlock, size: usize, align: usize) {
+            let layout = Layout::from_size_align(size + align, 2 * align).unwrap();
+            let ptr = block.ptr.as_ptr() as usize;
+            let ptr = (ptr - align) as *mut u8;
+            unsafe {
+                std::alloc::dealloc(ptr, layout);
+            }
+        }
+
+        #[test]
+        fn fill_one_cache() {
+            let check = |i: CacheChainIter| {
+                let block = allocate(i.size(), i.size());
+
+                let mut chain = CacheChain::default();
+                chain.fill_cache(block);
+
+                for j in chain.iter() {
+                    let ptr = chain.caches[j.index()].pop();
+                    if i == j {
+                        assert!(ptr.is_some());
+                        assert!(is_fit_align(j.layout(), ptr.unwrap()));
+
+                        let ptr = chain.caches[j.index()].pop();
+                        assert!(ptr.is_none());
+                    } else {
+                        assert!(ptr.is_none());
+                    }
+                }
+
+                deallocate(block, i.size(), i.size());
+            };
+
+            for i in CacheChain::default().iter() {
+                check(i);
+            }
+        }
+
+        #[test]
+        fn fill_two_caches() {
+            let check = |i: CacheChainIter, j: CacheChainIter| {
+                let block = allocate(i.size() + j.size(), i.size());
+
+                let mut chain = CacheChain::default();
+                chain.fill_cache(block);
+
+                for k in chain.iter() {
+                    let ptr = chain.caches[k.index()].pop();
+
+                    if (k == i) || (k == j) {
+                        assert!(ptr.is_some());
+                        assert!(is_fit_align(k.layout(), ptr.unwrap()));
+
+                        let ptr = chain.caches[k.index()].pop();
+                        if i == j {
+                            assert!(ptr.is_some());
+                            assert!(is_fit_align(k.layout(), ptr.unwrap()));
+                        } else {
+                            assert!(ptr.is_none());
+                        }
+                    } else {
+                        assert!(ptr.is_none());
+                    }
+                }
+
+                deallocate(block, i.size() + j.size(), i.size());
+            };
+
+            for i in CacheChain::default().iter() {
+                check(i, i);
+
+                let mut j = i;
+                j.next();
+                if j.is_end() {
+                    break;
+                }
+
+                check(j, i);
+                check(i, j);
+            }
         }
     }
 }
