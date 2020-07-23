@@ -32,7 +32,6 @@
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::ptr::NonNull;
 use core::result::Result;
-use std::alloc::Global;
 
 pub enum Backend<'a, B: AllocRef> {
     Borrowed(&'a mut B),
@@ -58,9 +57,12 @@ where
     }
 }
 
-impl Default for Backend<'static, Global> {
+impl<B> Default for Backend<'static, B>
+where
+    B: AllocRef + Default,
+{
     fn default() -> Self {
-        Self::Owned(Global::default())
+        Self::Owned(Default::default())
     }
 }
 

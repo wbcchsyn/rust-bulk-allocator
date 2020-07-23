@@ -33,12 +33,11 @@ use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
-use crate::MEMORY_CHUNK_LAYOUT;
+use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
-use std::alloc::Global;
 
 /// BulkAllocator pools allocated memory and frees it on the destruction.
 ///
@@ -56,7 +55,21 @@ pub struct BulkAllocator<'a, B: 'a + AllocRef> {
     backend: Backend<'a, B>,
 }
 
-impl Default for BulkAllocator<'static, Global> {
+impl<B: AllocRef> BulkAllocator<'_, B> {
+    /// Layout of memory chunk BulkAllocator acquires from the backend.
+    //
+    // The size must be 2 * MAX_CACHE_SIZE or larger; otherwise, BulkAllocator
+    // doesn't always make cache for MAX_CACHE_SIZE.
+    //
+    // I am not sure how the backend behaves when the align is very large.
+    const MEMORY_CHUNK_LAYOUT: Layout =
+        unsafe { Layout::from_size_align_unchecked(MAX_CACHE_SIZE * 8, MIN_CACHE_SIZE) };
+}
+
+impl<B> Default for BulkAllocator<'static, B>
+where
+    B: AllocRef + Default,
+{
     fn default() -> Self {
         Self {
             pool: Default::default(),
@@ -92,7 +105,10 @@ where
 impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
     fn drop(&mut self) {
         while let Some(ptr) = self.to_free.pop() {
-            unsafe { self.backend.dealloc(ptr.cast::<u8>(), MEMORY_CHUNK_LAYOUT) }
+            unsafe {
+                self.backend
+                    .dealloc(ptr.cast::<u8>(), Self::MEMORY_CHUNK_LAYOUT)
+            }
         }
     }
 }
@@ -109,7 +125,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                         // Make cache and try again
                         let chunk = self
                             .backend
-                            .alloc(MEMORY_CHUNK_LAYOUT, AllocInit::Uninitialized)?;
+                            .alloc(Self::MEMORY_CHUNK_LAYOUT, AllocInit::Uninitialized)?;
                         let (to_free, block) = split_memory_block(chunk, size_of::<PtrList>());
 
                         self.to_free.push(to_free.ptr);
@@ -155,6 +171,7 @@ impl<B: AllocRef> BulkAllocator<'_, B> {
 mod tests {
     use super::*;
     use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
+    use std::alloc::Global;
 
     const SIZES: [usize; 10] = [
         1,
@@ -196,7 +213,7 @@ mod tests {
 
     #[test]
     fn alloc_and_dealloc_works() {
-        let mut alloc = BulkAllocator::default();
+        let mut alloc = BulkAllocator::<'static, Global>::default();
 
         let mut check = |size, align| {
             let layout = Layout::from_size_align(size, align).unwrap();
@@ -248,7 +265,7 @@ mod tests {
 
     #[test]
     fn allocate_one_chunk_count() {
-        let mut alloc = BulkAllocator::default();
+        let mut alloc = BulkAllocator::<'static, Global>::default();
         assert_eq!(0, alloc.memory_chunk_count());
 
         // Too large layouts doesn't affect to the chunk.
@@ -281,9 +298,11 @@ mod tests {
 
     #[test]
     fn allocate_many_chunks() {
-        let mut alloc = BulkAllocator::default();
+        let mut alloc = BulkAllocator::<'static, Global>::default();
         let layout = Layout::from_size_align(MAX_CACHE_SIZE, MAX_CACHE_SIZE).unwrap();
-        let alloc_per_chunk = (MEMORY_CHUNK_LAYOUT.size() - size_of::<PtrList>()) / MAX_CACHE_SIZE;
+        let alloc_per_chunk = (BulkAllocator::<Global>::MEMORY_CHUNK_LAYOUT.size()
+            - size_of::<PtrList>())
+            / MAX_CACHE_SIZE;
 
         for i in 1..8 {
             for _ in 0..alloc_per_chunk {
