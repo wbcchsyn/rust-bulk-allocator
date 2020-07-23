@@ -52,6 +52,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// # Thread safety
 ///
 /// All the mutable methods are thread unsafe.
+///
+/// # Warnings
+///
+/// After drop, programer must NOT use the memories which method alloc() of this instance returned.
 pub struct BulkAllocator<'a, B: 'a + AllocRef> {
     pool: CacheChain,
     // Memory chunks to be freed on the destruction.
