@@ -55,7 +55,7 @@ impl PtrList {
         }
     }
 
-    pub fn push<T>(&mut self, ptr: NonNull<T>) {
+    pub fn push(&mut self, ptr: NonNull<u8>) {
         let mut ptr = ptr.cast::<Self>();
 
         unsafe {
