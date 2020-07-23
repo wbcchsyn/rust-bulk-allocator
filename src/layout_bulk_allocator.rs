@@ -171,6 +171,11 @@ impl<B: AllocRef> LayoutBulkAllocator<'_, B> {
     fn memory_chunk_layout(&self) -> Layout {
         Layout::from_size_align(MEMORY_CHUNK_SIZE, self.layout.align()).unwrap()
     }
+
+    #[cfg(test)]
+    fn memory_chunk_count(&self) -> usize {
+        self.to_free.len()
+    }
 }
 
 #[cfg(test)]
