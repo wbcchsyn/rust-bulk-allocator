@@ -50,6 +50,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// that of `BulkAllocator` as long as the argument layout of `alloc()` and `dealloc()` is
 /// same to which is passed to the constructor.
 ///
+/// # Lifetime
+///
+/// Each instance owns or borrows the backend `AllocRef` instance. If it is borrowed, the lifetime
+/// is limited by the reference; otherwise, the lifetime will be 'static.
+///
 /// # Thread safety
 ///
 /// All the mutable methods are thread unsafe.

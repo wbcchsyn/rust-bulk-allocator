@@ -52,6 +52,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// If the argument `layout` of `alloc()` is always same, probably `LayoutBulkAllocator`
 /// is better than `BulkAllocator`.
 ///
+/// # Lifetime
+///
+/// Each instance owns or borrows the backend `AllocRef` instance. If it is borrowed, the lifetime
+/// is limited by the reference; otherwise, the lifetime will be 'static.
+///
 /// # Thread safety
 ///
 /// All the mutable methods are thread unsafe.
