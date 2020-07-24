@@ -40,14 +40,30 @@ use core::ptr::NonNull;
 use core::result::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// BulkAllocator pools allocated memory and frees it on the destruction.
+/// `BulkAllocator` pools allocated memory and frees it on the destruction.
 ///
-/// alloc() delegates the request to the backend if the requested layout is too
+/// `alloc()` delegates the request to the backend if the requested layout is too
 /// large to cache; otherwise, it dispatches the pooled memory and return. If no
 /// memory is pooled, acquire memory chunk from the backend.
 ///
-/// dealloc() delegates the request to the backend if the requested layout is too
+/// `dealloc()` delegates the request to the backend if the requested layout is too
 /// large to cache; otherwise, it pools the passed memory.
+///
+/// If the argument `layout` of `alloc()` is always same, probably `LayoutBulkAllocator`
+/// is better than `BulkAllocator`.
+///
+/// # Lifetime
+///
+/// Each instance owns or borrows the backend `AllocRef` instance. If it is borrowed, the lifetime
+/// is limited by the reference; otherwise, the lifetime will be 'static.
+///
+/// # Thread safety
+///
+/// All the mutable methods are thread unsafe.
+///
+/// # Warnings
+///
+/// After drop, programer must NOT use the memories which method `alloc()` of this instance returned.
 pub struct BulkAllocator<'a, B: 'a + AllocRef> {
     pool: CacheChain,
     // Memory chunks to be freed on the destruction.
@@ -71,6 +87,7 @@ impl<B> Default for BulkAllocator<'static, B>
 where
     B: AllocRef + Default,
 {
+    /// The backend is constructed by `Default::default()` and the new instance owns it.
     fn default() -> Self {
         Self {
             pool: Default::default(),
@@ -81,6 +98,7 @@ where
 }
 
 impl<B: AllocRef> From<B> for BulkAllocator<'static, B> {
+    /// The new instance owns the backend.
     fn from(backend: B) -> Self {
         Self {
             pool: Default::default(),
@@ -94,6 +112,7 @@ impl<'a, B> From<&'a mut B> for BulkAllocator<'a, B>
 where
     B: 'a + AllocRef,
 {
+    /// The new instance borrows the backend and the lifetime is limited by it.
     fn from(backend: &'a mut B) -> Self {
         Self {
             pool: Default::default(),
@@ -117,12 +136,15 @@ impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
     }
 }
 
+/// # Thread safety
+///
+/// All the methods are thread unsafe.
 unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
-    /// ToDo: Implement later
     fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
         match self.pool.find(layout) {
             // Too large for the pool
             None => self.backend.alloc(layout, init),
+            // Dispatch the cache and return
             Some(index) => {
                 let block = match self.pool.pop(index) {
                     None => {

@@ -32,13 +32,36 @@
 use crate::backend::Backend;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
-use crate::{MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
+use crate::{MAX_CACHE_SIZE, MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// `LayoutBulkAllocator` pools allocated memory and frees it on the destruction.
+///
+/// `alloc()` and `dealloc()` delegates the request if the layout is different from
+/// what is specified to the constructor; otherwise, `dealloc()` caches the passed
+/// pointer and `alloc()` returns the cache. If no memory is pooled, `alloc()`
+/// allocate memory chunk from the backend, and makes caches at first.
+///
+/// Compared to `BulkAllocator` the performance of `LayoutBulkAllocator` is better than
+/// that of `BulkAllocator` as long as the argument layout of `alloc()` and `dealloc()` is
+/// same to which is passed to the constructor.
+///
+/// # Lifetime
+///
+/// Each instance owns or borrows the backend `AllocRef` instance. If it is borrowed, the lifetime
+/// is limited by the reference; otherwise, the lifetime will be 'static.
+///
+/// # Thread safety
+///
+/// All the mutable methods are thread unsafe.
+///
+/// # Warnings
+///
+/// After drop, programer must NOT use the memories which method `alloc()` of this instance returned.
 pub struct LayoutBulkAllocator<'a, B: 'a + AllocRef> {
     layout: Layout,
     pool: PtrList,
@@ -52,7 +75,13 @@ impl<B> LayoutBulkAllocator<'static, B>
 where
     B: AllocRef + Default,
 {
+    /// Constructor specifies only the layout for the instance to use the cache.
+    ///
+    /// The backend `AllocRef` instance is created by `Default::default()`.
+    /// The instance owns the backend, so there is no limitation for the lifetime.
     pub fn from_layout(layout: Layout) -> Self {
+        Self::check_layout(layout);
+
         Self {
             layout,
             pool: Default::default(),
@@ -63,7 +92,12 @@ where
 }
 
 impl<B: AllocRef> LayoutBulkAllocator<'static, B> {
+    /// Construct a new instance from the layout and the backend `AllocRef` instance.
+    ///
+    /// The instance owns the backend, so there is no limitation of the lifetime.
     pub fn from_layout_backend(layout: Layout, backend: B) -> Self {
+        Self::check_layout(layout);
+
         Self {
             layout,
             pool: Default::default(),
@@ -74,7 +108,12 @@ impl<B: AllocRef> LayoutBulkAllocator<'static, B> {
 }
 
 impl<'a, B: 'a + AllocRef> LayoutBulkAllocator<'a, B> {
+    /// Construct a neww instance from the layout and the reference to the backend.
+    ///
+    /// The instance just borrows the backend, so the lifetime is limited.
     pub fn from_layout_mut_backend(layout: Layout, backend: &'a mut B) -> Self {
+        Self::check_layout(layout);
+
         Self {
             layout,
             pool: Default::default(),
@@ -107,6 +146,9 @@ impl<B: AllocRef> Drop for LayoutBulkAllocator<'_, B> {
     }
 }
 
+/// # Thread safety
+///
+/// All the methods are thread unsafe.
 unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
     fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
         if layout != self.layout {
@@ -170,6 +212,11 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
 impl<B: AllocRef> LayoutBulkAllocator<'_, B> {
     fn memory_chunk_layout(&self) -> Layout {
         Layout::from_size_align(MEMORY_CHUNK_SIZE, self.layout.align()).unwrap()
+    }
+
+    fn check_layout(layout: Layout) {
+        assert!(layout.size() <= MAX_CACHE_SIZE);
+        assert!(layout.align() <= MAX_CACHE_SIZE);
     }
 
     #[cfg(test)]

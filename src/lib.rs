@@ -29,7 +29,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(allocator_api)]
+#![feature(allocator_api, external_doc)]
+#![doc(include = "../README.md")]
 
 mod backend;
 mod bulk_allocator;
