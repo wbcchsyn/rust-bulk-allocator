@@ -39,11 +39,11 @@ use core::ptr::NonNull;
 use core::result::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// LayoutBulkAllocator pools allocated memory and frees it on the destruction.
+/// `LayoutBulkAllocator` pools allocated memory and frees it on the destruction.
 ///
-/// alloc() and dealloc() delegates the request if the layout is different from
-/// what is specified to the constructor; otherwise, dealloc() caches the passed
-/// pointer and alloc() returns the cache. If no memory is pooled, alloc()
+/// `alloc()` and `dealloc()` delegates the request if the layout is different from
+/// what is specified to the constructor; otherwise, `dealloc()` caches the passed
+/// pointer and `alloc()` returns the cache. If no memory is pooled, `alloc()`
 /// allocate memory chunk from the backend, and makes caches at first.
 ///
 /// Compared to `BulkAllocator` the performance of `LayoutBulkAllocator` is better than
@@ -61,7 +61,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 ///
 /// # Warnings
 ///
-/// After drop, programer must NOT use the memories which method alloc() of this instance returned.
+/// After drop, programer must NOT use the memories which method `alloc()` of this instance returned.
 pub struct LayoutBulkAllocator<'a, B: 'a + AllocRef> {
     layout: Layout,
     pool: PtrList,

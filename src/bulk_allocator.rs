@@ -40,13 +40,13 @@ use core::ptr::NonNull;
 use core::result::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// BulkAllocator pools allocated memory and frees it on the destruction.
+/// `BulkAllocator` pools allocated memory and frees it on the destruction.
 ///
-/// alloc() delegates the request to the backend if the requested layout is too
+/// `alloc()` delegates the request to the backend if the requested layout is too
 /// large to cache; otherwise, it dispatches the pooled memory and return. If no
 /// memory is pooled, acquire memory chunk from the backend.
 ///
-/// dealloc() delegates the request to the backend if the requested layout is too
+/// `dealloc()` delegates the request to the backend if the requested layout is too
 /// large to cache; otherwise, it pools the passed memory.
 ///
 /// If the argument `layout` of `alloc()` is always same, probably `LayoutBulkAllocator`
@@ -63,7 +63,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 ///
 /// # Warnings
 ///
-/// After drop, programer must NOT use the memories which method alloc() of this instance returned.
+/// After drop, programer must NOT use the memories which method `alloc()` of this instance returned.
 pub struct BulkAllocator<'a, B: 'a + AllocRef> {
     pool: CacheChain,
     // Memory chunks to be freed on the destruction.
