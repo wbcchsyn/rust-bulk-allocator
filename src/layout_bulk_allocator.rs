@@ -32,7 +32,7 @@
 use crate::backend::Backend;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
-use crate::{MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
+use crate::{MAX_CACHE_SIZE, MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
 use core::mem::size_of;
 use core::ptr::NonNull;
@@ -71,6 +71,8 @@ where
     B: AllocRef + Default,
 {
     pub fn from_layout(layout: Layout) -> Self {
+        Self::check_layout(layout);
+
         Self {
             layout,
             pool: Default::default(),
@@ -82,6 +84,8 @@ where
 
 impl<B: AllocRef> LayoutBulkAllocator<'static, B> {
     pub fn from_layout_backend(layout: Layout, backend: B) -> Self {
+        Self::check_layout(layout);
+
         Self {
             layout,
             pool: Default::default(),
@@ -93,6 +97,8 @@ impl<B: AllocRef> LayoutBulkAllocator<'static, B> {
 
 impl<'a, B: 'a + AllocRef> LayoutBulkAllocator<'a, B> {
     pub fn from_layout_mut_backend(layout: Layout, backend: &'a mut B) -> Self {
+        Self::check_layout(layout);
+
         Self {
             layout,
             pool: Default::default(),
@@ -191,6 +197,11 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
 impl<B: AllocRef> LayoutBulkAllocator<'_, B> {
     fn memory_chunk_layout(&self) -> Layout {
         Layout::from_size_align(MEMORY_CHUNK_SIZE, self.layout.align()).unwrap()
+    }
+
+    fn check_layout(layout: Layout) {
+        assert!(layout.size() <= MAX_CACHE_SIZE);
+        assert!(layout.align() <= MAX_CACHE_SIZE);
     }
 
     #[cfg(test)]
