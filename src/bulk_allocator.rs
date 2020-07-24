@@ -87,6 +87,7 @@ impl<B> Default for BulkAllocator<'static, B>
 where
     B: AllocRef + Default,
 {
+    /// The backend is constructed by `Default::default()` and the new instance owns it.
     fn default() -> Self {
         Self {
             pool: Default::default(),
@@ -97,6 +98,7 @@ where
 }
 
 impl<B: AllocRef> From<B> for BulkAllocator<'static, B> {
+    /// The new instance owns the backend.
     fn from(backend: B) -> Self {
         Self {
             pool: Default::default(),
@@ -110,6 +112,7 @@ impl<'a, B> From<&'a mut B> for BulkAllocator<'a, B>
 where
     B: 'a + AllocRef,
 {
+    /// The new instance borrows the backend and the lifetime is limited by it.
     fn from(backend: &'a mut B) -> Self {
         Self {
             pool: Default::default(),
