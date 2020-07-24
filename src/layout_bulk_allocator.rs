@@ -70,6 +70,10 @@ impl<B> LayoutBulkAllocator<'static, B>
 where
     B: AllocRef + Default,
 {
+    /// Constructor specifies only the layout for the instance to use the cache.
+    ///
+    /// The backend `AllocRef` instance is created by `Default::default()`.
+    /// The instance owns the backend, so there is no limitation for the lifetime.
     pub fn from_layout(layout: Layout) -> Self {
         Self::check_layout(layout);
 
@@ -83,6 +87,9 @@ where
 }
 
 impl<B: AllocRef> LayoutBulkAllocator<'static, B> {
+    /// Construct a new instance from the layout and the backend `AllocRef` instance.
+    ///
+    /// The instance owns the backend, so there is no limitation of the lifetime.
     pub fn from_layout_backend(layout: Layout, backend: B) -> Self {
         Self::check_layout(layout);
 
@@ -96,6 +103,9 @@ impl<B: AllocRef> LayoutBulkAllocator<'static, B> {
 }
 
 impl<'a, B: 'a + AllocRef> LayoutBulkAllocator<'a, B> {
+    /// Construct a neww instance from the layout and the reference to the backend.
+    ///
+    /// The instance just borrows the backend, so the lifetime is limited.
     pub fn from_layout_mut_backend(layout: Layout, backend: &'a mut B) -> Self {
         Self::check_layout(layout);
 
