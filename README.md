@@ -1,6 +1,9 @@
-# bulk_allocator
+# bulk\_allocator
 
-bulk_allocator is implementations for AllocRef.
+[lgpl-badge]: https://img.shields.io/badge/license-lgpl-blue.svg
+[apache2-badge]: https://img.shields.io/badge/license-apache2-blue.svg
+
+bulk\_allocator is implementations for AllocRef.
 They pool allocated memory and release them on the destruction.
 
 Method `dealloc` caches the released memory and `alloc` reuses it.
