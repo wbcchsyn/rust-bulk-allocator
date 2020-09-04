@@ -60,6 +60,15 @@ struct MemoryBlock {
     size: usize,
 }
 
+impl MemoryBlock {
+    fn to_slice(self) -> NonNull<[u8]> {
+        unsafe {
+            let slice = core::slice::from_raw_parts(self.ptr.as_ptr(), self.size);
+            From::from(slice)
+        }
+    }
+}
+
 fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
     debug_assert!(count <= block.size);
 
