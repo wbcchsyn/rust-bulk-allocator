@@ -99,7 +99,7 @@ impl CacheChain {
         }
     }
 
-    pub fn pop(&mut self, index: CacheChainIter) -> Option<NonNull<[u8]>> {
+    pub fn pop(&mut self, index: CacheChainIter) -> Option<*mut [u8]> {
         for mut it in index {
             match self.caches[it.index()].pop() {
                 None => continue,
@@ -118,7 +118,7 @@ impl CacheChain {
                     }
 
                     debug_assert_eq!(index.size(), block.len());
-                    return Some(block);
+                    return Some(block.as_ptr());
                 }
             }
         }

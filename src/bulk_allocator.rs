@@ -161,6 +161,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                     Some(block) => block,
                 };
 
+                let block = unsafe { NonNull::new_unchecked(block) };
                 Ok(block)
             }
         }
