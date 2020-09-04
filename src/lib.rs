@@ -29,7 +29,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(allocator_api, external_doc)]
+#![feature(allocator_api, external_doc, slice_ptr_len)]
 #![doc(include = "../README.md")]
 
 mod backend;
