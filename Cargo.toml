@@ -14,4 +14,7 @@ documentation = "https://wbcchsyn.github.io/rust-bulk-allocator/bulk_allocator/i
 
 categories = ["memory-management"]
 
+[badges]
+travis-ci = { repository = "wbcchsyn/rust-bulk-allocator" }
+
 [dependencies]
