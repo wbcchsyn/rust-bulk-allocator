@@ -31,7 +31,6 @@
 
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
-use crate::MemoryBlock;
 use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
 use core::alloc::Layout;
 use core::ptr::NonNull;
@@ -66,20 +65,20 @@ impl CacheChain {
         self.iter().find(|x| target <= x.size())
     }
 
-    pub fn fill_cache(&mut self, mut block: MemoryBlock) {
+    pub fn fill_cache(&mut self, mut block: NonNull<[u8]>) {
         let mut hint = self.iter();
-        debug_assert!(is_fit(hint.layout(), block.to_slice()));
+        debug_assert!(is_fit(hint.layout(), block));
 
-        let mut make_cache = |i: CacheChainIter, block: MemoryBlock| -> MemoryBlock {
-            let (f, s) = split_memory_block(block.to_slice(), i.size());
+        let mut make_cache = |i: CacheChainIter, block: NonNull<[u8]>| -> NonNull<[u8]> {
+            let (f, s) = split_memory_block(block, i.size());
             debug_assert!(is_fit(i.layout(), f));
-            self.caches[i.index()].push(MemoryBlock::from(f).ptr);
-            MemoryBlock::from(s)
+            self.caches[i.index()].push(block.cast::<u8>());
+            s
         };
 
         // Increasing the hint and make cache
-        while is_fit_size(hint.layout(), block.size) {
-            while is_fit(hint.layout(), block.to_slice()) {
+        while is_fit_size(hint.layout(), block.len()) {
+            while is_fit(hint.layout(), block) {
                 hint.next();
                 if hint.is_end() {
                     break;
@@ -90,8 +89,8 @@ impl CacheChain {
         }
 
         // Decreasing the hint and make cache
-        while 0 < block.size {
-            while !is_fit_size(hint.layout(), block.size) {
+        while 0 < block.len() {
+            while !is_fit_size(hint.layout(), block.len()) {
                 hint.next_back();
                 debug_assert!(!hint.is_end());
             }
@@ -206,6 +205,7 @@ impl DoubleEndedIterator for CacheChainIter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::MemoryBlock;
 
     #[test]
     fn iterator_count() {
@@ -307,7 +307,7 @@ mod tests {
                 let block = allocate(i.size(), i.size());
 
                 let mut chain = CacheChain::default();
-                chain.fill_cache(block);
+                chain.fill_cache(block.to_slice());
 
                 for j in chain.iter() {
                     let ptr = chain.caches[j.index()].pop();
@@ -336,7 +336,7 @@ mod tests {
                 let block = allocate(i.size() + j.size(), i.size());
 
                 let mut chain = CacheChain::default();
-                chain.fill_cache(block);
+                chain.fill_cache(block.to_slice());
 
                 for k in chain.iter() {
                     let ptr = chain.caches[k.index()].pop();

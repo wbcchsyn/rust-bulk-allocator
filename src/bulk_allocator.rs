@@ -156,7 +156,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                             split_memory_block(chunk.to_slice(), size_of::<PtrList>());
 
                         self.to_free.push(MemoryBlock::from(to_free).ptr);
-                        self.pool.fill_cache(MemoryBlock::from(block));
+                        self.pool.fill_cache(block);
 
                         self.pool.pop(index).unwrap()
                     }
