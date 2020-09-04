@@ -33,7 +33,7 @@ use core::ptr::NonNull;
 
 /// Forming forward linked list
 pub struct PtrList {
-    next: Option<NonNull<PtrList>>,
+    next: Option<*mut PtrList>,
 }
 
 impl Default for PtrList {
@@ -43,15 +43,13 @@ impl Default for PtrList {
 }
 
 impl PtrList {
-    pub fn pop(&mut self) -> Option<NonNull<u8>> {
+    pub fn pop(&mut self) -> Option<*mut u8> {
         match self.next {
             None => None,
-            Some(nonnull) => {
-                unsafe {
-                    self.next = nonnull.as_ref().next;
-                }
-                Some(nonnull.cast::<u8>())
-            }
+            Some(ptr) => unsafe {
+                self.next = (&*ptr).next;
+                Some(ptr as *mut u8)
+            },
         }
     }
 
@@ -62,15 +60,15 @@ impl PtrList {
             ptr.as_mut().next = self.next;
         }
 
-        self.next = Some(ptr);
+        self.next = Some(ptr.as_ptr());
     }
 
     #[cfg(test)]
     pub fn len(&self) -> usize {
         let mut next = self.next;
         let mut ret = 0;
-        while next.is_some() {
-            next = unsafe { next.unwrap().as_ref().next };
+        while let Some(ptr) = next {
+            next = unsafe { (&*ptr).next };
             ret += 1;
         }
 
@@ -97,15 +95,15 @@ mod tests {
 
         {
             head.push(fst);
-            debug_assert_eq!(Some(fst), head.pop());
+            debug_assert_eq!(Some(fst.as_ptr()), head.pop());
             debug_assert_eq!(None, head.pop());
         }
 
         {
             head.push(fst);
             head.push(snd);
-            debug_assert_eq!(Some(snd), head.pop());
-            debug_assert_eq!(Some(fst), head.pop());
+            debug_assert_eq!(Some(snd.as_ptr()), head.pop());
+            debug_assert_eq!(Some(fst.as_ptr()), head.pop());
             debug_assert_eq!(None, head.pop());
         }
     }

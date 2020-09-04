@@ -132,15 +132,14 @@ impl<B: AllocRef> Drop for LayoutBulkAllocator<'_, B> {
         barrier.load(Ordering::SeqCst);
 
         while let Some(ptr) = self.to_free.pop() {
-            // move ptr to the first position of the chunk.
-            let ptr = ptr.as_ptr() as usize;
-            let ptr = ptr + size_of::<PtrList>() - self.memory_chunk_layout().size();
-
             unsafe {
-                self.backend.dealloc(
-                    NonNull::new_unchecked(ptr as *mut u8),
-                    self.memory_chunk_layout(),
-                );
+                // move ptr to the first position of the chunk.
+                let ptr = ptr
+                    .add(size_of::<PtrList>())
+                    .sub(self.memory_chunk_layout().size());
+
+                self.backend
+                    .dealloc(NonNull::new_unchecked(ptr), self.memory_chunk_layout());
             }
         }
     }
@@ -182,7 +181,7 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
             }
 
             unsafe {
-                let slice = core::slice::from_raw_parts(ptr.unwrap().as_ptr(), size);
+                let slice = core::slice::from_raw_parts(ptr.unwrap(), size);
                 Ok(From::from(slice))
             }
         }
