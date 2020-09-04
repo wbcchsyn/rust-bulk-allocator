@@ -33,7 +33,7 @@ use core::ptr::NonNull;
 
 /// Forming forward linked list
 pub struct PtrList {
-    next: Option<NonNull<PtrList>>,
+    next: Option<*mut PtrList>,
 }
 
 impl Default for PtrList {
@@ -46,12 +46,11 @@ impl PtrList {
     pub fn pop(&mut self) -> Option<NonNull<u8>> {
         match self.next {
             None => None,
-            Some(nonnull) => {
-                unsafe {
-                    self.next = nonnull.as_ref().next;
-                }
-                Some(nonnull.cast::<u8>())
-            }
+            Some(ptr) => unsafe {
+                self.next = (&*ptr).next;
+                let ptr = NonNull::new_unchecked(ptr as *mut u8);
+                Some(ptr)
+            },
         }
     }
 
@@ -62,15 +61,15 @@ impl PtrList {
             ptr.as_mut().next = self.next;
         }
 
-        self.next = Some(ptr);
+        self.next = Some(ptr.as_ptr());
     }
 
     #[cfg(test)]
     pub fn len(&self) -> usize {
         let mut next = self.next;
         let mut ret = 0;
-        while next.is_some() {
-            next = unsafe { next.unwrap().as_ref().next };
+        while let Some(ptr) = next {
+            next = unsafe { (&*ptr).next };
             ret += 1;
         }
 
