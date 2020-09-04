@@ -68,18 +68,18 @@ impl CacheChain {
 
     pub fn fill_cache(&mut self, mut block: MemoryBlock) {
         let mut hint = self.iter();
-        debug_assert!(is_fit(hint.layout(), block));
+        debug_assert!(is_fit(hint.layout(), block.to_slice()));
 
         let mut make_cache = |i: CacheChainIter, block: MemoryBlock| -> MemoryBlock {
             let (f, s) = split_memory_block(block.to_slice(), i.size());
-            debug_assert!(is_fit(i.layout(), MemoryBlock::from(f)));
+            debug_assert!(is_fit(i.layout(), f));
             self.caches[i.index()].push(MemoryBlock::from(f).ptr);
             MemoryBlock::from(s)
         };
 
         // Increasing the hint and make cache
         while is_fit_size(hint.layout(), block.size) {
-            while is_fit(hint.layout(), block) {
+            while is_fit(hint.layout(), block.to_slice()) {
                 hint.next();
                 if hint.is_end() {
                     break;
@@ -141,8 +141,8 @@ fn is_fit_size(layout: Layout, size: usize) -> bool {
     layout.size() <= size
 }
 
-fn is_fit(layout: Layout, block: MemoryBlock) -> bool {
-    is_fit_size(layout, block.size) && is_fit_align(layout, block.ptr)
+fn is_fit(layout: Layout, block: NonNull<[u8]>) -> bool {
+    is_fit_size(layout, block.len()) && is_fit_align(layout, block.cast::<u8>())
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
