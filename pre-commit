@@ -34,5 +34,7 @@ check_rs() {
         fi
     done
 
+    cargo +nightly test || exit "$?"
+
     exit 0
 )
