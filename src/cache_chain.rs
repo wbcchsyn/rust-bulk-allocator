@@ -283,6 +283,7 @@ mod tests {
     mod fill_cache_tests {
         use super::*;
 
+        /// Returns pointer whose align fits to `align`, but not to `2 * align` .
         fn allocate(size: usize, align: usize) -> MemoryBlock {
             let layout = Layout::from_size_align(size + align, 2 * align).unwrap();
             let ptr = unsafe { std::alloc::alloc(layout) };
@@ -292,11 +293,11 @@ mod tests {
             MemoryBlock { ptr, size }
         }
 
-        fn deallocate(block: MemoryBlock, size: usize, align: usize) {
+        fn deallocate(block: NonNull<[u8]>, size: usize, align: usize) {
             let layout = Layout::from_size_align(size + align, 2 * align).unwrap();
-            let ptr = block.ptr.as_ptr() as usize;
-            let ptr = (ptr - align) as *mut u8;
             unsafe {
+                let ptr = block.cast::<u8>().as_ptr();
+                let ptr = ptr.sub(align);
                 std::alloc::dealloc(ptr, layout);
             }
         }
@@ -322,7 +323,7 @@ mod tests {
                     }
                 }
 
-                deallocate(block, i.size(), i.size());
+                deallocate(block.to_slice(), i.size(), i.size());
             };
 
             for i in CacheChain::default().iter() {
@@ -357,7 +358,7 @@ mod tests {
                     }
                 }
 
-                deallocate(block, i.size() + j.size(), i.size());
+                deallocate(block.to_slice(), i.size() + j.size(), i.size());
             };
 
             for i in CacheChain::default().iter() {
