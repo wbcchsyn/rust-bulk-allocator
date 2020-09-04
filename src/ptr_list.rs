@@ -44,13 +44,10 @@ impl Default for PtrList {
 
 impl PtrList {
     pub fn pop(&mut self) -> Option<*mut u8> {
-        match self.next {
-            None => None,
-            Some(ptr) => unsafe {
-                self.next = (&*ptr).next;
-                Some(ptr as *mut u8)
-            },
-        }
+        self.next.map(|ptr| unsafe {
+            self.next = (&*ptr).next;
+            ptr as *mut u8
+        })
     }
 
     pub fn push(&mut self, ptr: NonNull<u8>) {
