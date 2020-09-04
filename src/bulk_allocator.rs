@@ -164,7 +164,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                     Some(block) => block,
                 };
 
-                Ok(block.to_slice())
+                Ok(block)
             }
         }
     }

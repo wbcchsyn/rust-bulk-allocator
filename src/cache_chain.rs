@@ -100,25 +100,25 @@ impl CacheChain {
         }
     }
 
-    pub fn pop(&mut self, index: CacheChainIter) -> Option<MemoryBlock> {
+    pub fn pop(&mut self, index: CacheChainIter) -> Option<NonNull<[u8]>> {
         for mut it in index {
             match self.caches[it.index()].pop() {
                 None => continue,
                 Some(ptr) => {
-                    let mut block = MemoryBlock {
-                        ptr,
-                        size: it.size(),
+                    let mut block = unsafe {
+                        let slice = core::slice::from_raw_parts(ptr.as_ptr(), it.size());
+                        From::from(slice)
                     };
 
                     for _ in index.index()..it.index() {
                         it.next_back();
-                        let (f, s) = split_memory_block(block.to_slice(), it.size());
+                        let (f, s) = split_memory_block(block, it.size());
                         debug_assert_eq!(f.len(), s.len());
-                        self.caches[it.index()].push(MemoryBlock::from(f).ptr);
-                        block = MemoryBlock::from(f);
+                        self.caches[it.index()].push(block.cast::<u8>());
+                        block = f;
                     }
 
-                    debug_assert_eq!(index.size(), block.size);
+                    debug_assert_eq!(index.size(), block.len());
                     return Some(block);
                 }
             }
