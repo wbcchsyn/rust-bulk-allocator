@@ -32,8 +32,9 @@
 use crate::backend::Backend;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
+use crate::MemoryBlock;
 use crate::{MAX_CACHE_SIZE, MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
-use core::alloc::{AllocErr, AllocRef, Layout, MemoryBlock};
+use core::alloc::{AllocErr, AllocRef, Layout};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
