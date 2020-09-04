@@ -33,8 +33,9 @@ use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
+use crate::MemoryBlock;
 use crate::{MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
-use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
+use core::alloc::{AllocErr, AllocRef, Layout};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
@@ -140,18 +141,17 @@ impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
 ///
 /// All the methods are thread unsafe.
 unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
-    fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+    fn alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         match self.pool.find(layout) {
             // Too large for the pool
-            None => self.backend.alloc(layout, init),
+            None => self.backend.alloc(layout),
             // Dispatch the cache and return
             Some(index) => {
                 let block = match self.pool.pop(index) {
                     None => {
                         // Make cache and try again
-                        let chunk = self
-                            .backend
-                            .alloc(Self::MEMORY_CHUNK_LAYOUT, AllocInit::Uninitialized)?;
+                        let chunk = self.backend.alloc(Self::MEMORY_CHUNK_LAYOUT)?;
+                        let chunk = MemoryBlock::from(chunk);
                         let (to_free, block) = split_memory_block(chunk, size_of::<PtrList>());
 
                         self.to_free.push(to_free.ptr);
@@ -163,14 +163,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                     Some(block) => block,
                 };
 
-                // Fill the block with 0 if necessary
-                if init == AllocInit::Zeroed {
-                    unsafe {
-                        core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
-                    }
-                }
-
-                Ok(block)
+                Ok(block.to_slice())
             }
         }
     }
@@ -244,37 +237,15 @@ mod tests {
         let mut check = |size, align| {
             let layout = Layout::from_size_align(size, align).unwrap();
 
-            // AllocInit::Uninitialized
-            {
-                let block = alloc.alloc(layout, AllocInit::Uninitialized).unwrap();
+            let block = alloc.alloc(layout).unwrap();
 
-                assert!(layout.size() <= block.size);
+            assert!(layout.size() <= block.len());
 
-                let ptr = block.ptr.as_ptr() as usize;
-                assert_eq!(0, ptr % layout.align());
+            let ptr = unsafe { block.as_ref().as_ptr() } as usize;
+            assert_eq!(0, ptr % layout.align());
 
-                unsafe {
-                    alloc.dealloc(block.ptr, layout);
-                }
-            }
-
-            // AllocInit::Zeroed
-            {
-                let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
-
-                assert!(layout.size() <= block.size);
-
-                let ptr = block.ptr.as_ptr() as usize;
-                assert_eq!(0, ptr % layout.align());
-
-                unsafe {
-                    let s = core::slice::from_raw_parts(ptr as *const u8, block.size);
-                    for &u in s {
-                        assert_eq!(0, u);
-                    }
-
-                    alloc.dealloc(block.ptr, layout);
-                }
+            unsafe {
+                alloc.dealloc(block.cast::<u8>(), layout);
             }
         };
 
@@ -296,28 +267,28 @@ mod tests {
 
         // Too large layouts doesn't affect to the chunk.
         for &l in &LARGE_LAYOUTS {
-            alloc.alloc(l, AllocInit::Zeroed).unwrap();
+            alloc.alloc(l).unwrap();
             assert_eq!(0, alloc.memory_chunk_count());
         }
 
         // One memory chunk is enough to pool for the following requests.
         for &s in &SIZES {
             let layout = Layout::from_size_align(s, 2).unwrap();
-            alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+            alloc.alloc(layout).unwrap();
             assert_eq!(1, alloc.memory_chunk_count());
         }
 
         // It make no difference to call alloc() and dealloc() many times.
         for _ in 0..1024 {
             let layout = Layout::from_size_align(MAX_CACHE_SIZE, MAX_CACHE_SIZE).unwrap();
-            let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+            let block = alloc.alloc(layout).unwrap();
             assert_eq!(1, alloc.memory_chunk_count());
-            unsafe { alloc.dealloc(block.ptr, layout) };
+            unsafe { alloc.dealloc(block.cast::<u8>(), layout) };
         }
 
         // Too large layouts doesn't affect to the chunk again.
         for &l in &LARGE_LAYOUTS {
-            alloc.alloc(l, AllocInit::Zeroed).unwrap();
+            alloc.alloc(l).unwrap();
             assert_eq!(1, alloc.memory_chunk_count());
         }
     }
@@ -332,7 +303,7 @@ mod tests {
 
         for i in 1..8 {
             for _ in 0..alloc_per_chunk {
-                alloc.alloc(layout, AllocInit::Uninitialized).unwrap();
+                alloc.alloc(layout).unwrap();
                 assert_eq!(i, alloc.memory_chunk_count());
             }
         }

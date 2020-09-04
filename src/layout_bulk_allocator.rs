@@ -32,8 +32,9 @@
 use crate::backend::Backend;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
+use crate::MemoryBlock;
 use crate::{MAX_CACHE_SIZE, MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
-use core::alloc::{AllocErr, AllocInit, AllocRef, Layout, MemoryBlock};
+use core::alloc::{AllocErr, AllocRef, Layout};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::result::Result;
@@ -150,9 +151,9 @@ impl<B: AllocRef> Drop for LayoutBulkAllocator<'_, B> {
 ///
 /// All the methods are thread unsafe.
 unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
-    fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+    fn alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         if layout != self.layout {
-            self.backend.alloc(layout, init)
+            self.backend.alloc(layout)
         } else {
             let size = core::cmp::max(MIN_CACHE_SIZE, layout.pad_to_align().size());
 
@@ -161,9 +162,8 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
 
             // Make cache and try again.
             if ptr.is_none() {
-                let mut block = self
-                    .backend
-                    .alloc(self.memory_chunk_layout(), AllocInit::Uninitialized)?;
+                let block = self.backend.alloc(self.memory_chunk_layout())?;
+                let mut block = MemoryBlock::from(block);
 
                 {
                     let first_size = self.memory_chunk_layout().size() - size_of::<PtrList>();
@@ -189,14 +189,7 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
                 size,
             };
 
-            // Fill the block with 0 if necessary
-            if init == AllocInit::Zeroed {
-                unsafe {
-                    core::ptr::write_bytes(block.ptr.as_ptr(), 0, block.size);
-                }
-            }
-
-            Ok(block)
+            Ok(block.to_slice())
         }
     }
 
@@ -282,37 +275,15 @@ mod tests {
         let check = |size, align, alloc: &mut LayoutBulkAllocator<'static, Global>| {
             let layout = Layout::from_size_align(size, align).unwrap();
 
-            // AllocInit::Uninitialized
-            {
-                let block = alloc.alloc(layout, AllocInit::Uninitialized).unwrap();
+            let block = alloc.alloc(layout).unwrap();
 
-                assert!(layout.size() <= block.size);
+            assert!(layout.size() <= block.len());
 
-                let ptr = block.ptr.as_ptr() as usize;
-                assert_eq!(0, ptr % layout.align());
+            let ptr = unsafe { block.as_ref().as_ptr() } as usize;
+            assert_eq!(0, ptr % layout.align());
 
-                unsafe {
-                    alloc.dealloc(block.ptr, layout);
-                }
-            }
-
-            // AllocInit::Zeroed
-            {
-                let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
-
-                assert!(layout.size() <= block.size);
-
-                let ptr = block.ptr.as_ptr() as usize;
-                assert_eq!(0, ptr % layout.align());
-
-                unsafe {
-                    let s = core::slice::from_raw_parts(ptr as *const u8, block.size);
-                    for &u in s {
-                        assert_eq!(0, u);
-                    }
-
-                    alloc.dealloc(block.ptr, layout);
-                }
+            unsafe {
+                alloc.dealloc(block.cast::<u8>(), layout);
             }
         };
 
@@ -344,26 +315,26 @@ mod tests {
         assert_eq!(0, alloc.memory_chunk_count());
 
         // The first call of alloc() increases the chunk count.
-        let block = alloc.alloc(layout, AllocInit::Uninitialized).unwrap();
+        let block = alloc.alloc(layout).unwrap();
         assert_eq!(1, alloc.memory_chunk_count());
         unsafe {
-            alloc.dealloc(block.ptr, layout);
+            alloc.dealloc(block.cast::<u8>(), layout);
         }
 
         // Repeatable alloc()/dealloc() call won't change the chunk count.
         for _ in 0..1024 {
-            let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
+            let block = alloc.alloc(layout).unwrap();
             assert_eq!(1, alloc.memory_chunk_count());
             unsafe {
-                alloc.dealloc(block.ptr, layout);
+                alloc.dealloc(block.cast::<u8>(), layout);
             }
         }
 
         let mut ptrs = Vec::new();
         for i in 1..10 {
             for _ in 0..((MEMORY_CHUNK_SIZE - size_of::<PtrList>()) / size) {
-                let block = alloc.alloc(layout, AllocInit::Zeroed).unwrap();
-                ptrs.push(block.ptr);
+                let block = alloc.alloc(layout).unwrap();
+                ptrs.push(block);
                 assert_eq!(i, alloc.memory_chunk_count());
             }
         }
@@ -379,10 +350,10 @@ mod tests {
                     continue;
                 }
 
-                let block = alloc.alloc(layout_, AllocInit::Uninitialized).unwrap();
+                let block = alloc.alloc(layout_).unwrap();
                 assert_eq!(chunk_count, alloc.memory_chunk_count());
                 unsafe {
-                    alloc.dealloc(block.ptr, layout);
+                    alloc.dealloc(block.cast::<u8>(), layout);
                 }
             }
         }
@@ -390,7 +361,7 @@ mod tests {
         // Deallocation won't change the chunk count
         for &ptr in &ptrs {
             unsafe {
-                alloc.dealloc(ptr, layout);
+                alloc.dealloc(ptr.cast::<u8>(), layout);
             }
             assert_eq!(chunk_count, alloc.memory_chunk_count());
         }
