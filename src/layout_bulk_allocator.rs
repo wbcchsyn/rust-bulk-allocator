@@ -151,7 +151,7 @@ impl<B: AllocRef> Drop for LayoutBulkAllocator<'_, B> {
 ///
 /// All the methods are thread unsafe.
 unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
-    fn alloc(&mut self, layout: Layout) -> Result<MemoryBlock, AllocErr> {
+    fn alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         if layout != self.layout {
             self.backend.alloc(layout)
         } else {
@@ -162,7 +162,8 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
 
             // Make cache and try again.
             if ptr.is_none() {
-                let mut block = self.backend.alloc(self.memory_chunk_layout())?;
+                let block = self.backend.alloc(self.memory_chunk_layout())?;
+                let mut block = MemoryBlock::from(block);
 
                 {
                     let first_size = self.memory_chunk_layout().size() - size_of::<PtrList>();
@@ -188,7 +189,7 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
                 size,
             };
 
-            Ok(block)
+            Ok(block.to_slice())
         }
     }
 
@@ -276,13 +277,13 @@ mod tests {
 
             let block = alloc.alloc(layout).unwrap();
 
-            assert!(layout.size() <= block.size);
+            assert!(layout.size() <= block.len());
 
-            let ptr = block.ptr.as_ptr() as usize;
+            let ptr = unsafe { block.as_ref().as_ptr() } as usize;
             assert_eq!(0, ptr % layout.align());
 
             unsafe {
-                alloc.dealloc(block.ptr, layout);
+                alloc.dealloc(block.cast::<u8>(), layout);
             }
         };
 
@@ -317,7 +318,7 @@ mod tests {
         let block = alloc.alloc(layout).unwrap();
         assert_eq!(1, alloc.memory_chunk_count());
         unsafe {
-            alloc.dealloc(block.ptr, layout);
+            alloc.dealloc(block.cast::<u8>(), layout);
         }
 
         // Repeatable alloc()/dealloc() call won't change the chunk count.
@@ -325,7 +326,7 @@ mod tests {
             let block = alloc.alloc(layout).unwrap();
             assert_eq!(1, alloc.memory_chunk_count());
             unsafe {
-                alloc.dealloc(block.ptr, layout);
+                alloc.dealloc(block.cast::<u8>(), layout);
             }
         }
 
@@ -333,7 +334,7 @@ mod tests {
         for i in 1..10 {
             for _ in 0..((MEMORY_CHUNK_SIZE - size_of::<PtrList>()) / size) {
                 let block = alloc.alloc(layout).unwrap();
-                ptrs.push(block.ptr);
+                ptrs.push(block);
                 assert_eq!(i, alloc.memory_chunk_count());
             }
         }
@@ -352,7 +353,7 @@ mod tests {
                 let block = alloc.alloc(layout_).unwrap();
                 assert_eq!(chunk_count, alloc.memory_chunk_count());
                 unsafe {
-                    alloc.dealloc(block.ptr, layout);
+                    alloc.dealloc(block.cast::<u8>(), layout);
                 }
             }
         }
@@ -360,7 +361,7 @@ mod tests {
         // Deallocation won't change the chunk count
         for &ptr in &ptrs {
             unsafe {
-                alloc.dealloc(ptr, layout);
+                alloc.dealloc(ptr.cast::<u8>(), layout);
             }
             assert_eq!(chunk_count, alloc.memory_chunk_count());
         }
