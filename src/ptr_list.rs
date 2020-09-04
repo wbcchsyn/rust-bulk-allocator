@@ -43,13 +43,12 @@ impl Default for PtrList {
 }
 
 impl PtrList {
-    pub fn pop(&mut self) -> Option<NonNull<u8>> {
+    pub fn pop(&mut self) -> Option<*mut u8> {
         match self.next {
             None => None,
             Some(ptr) => unsafe {
                 self.next = (&*ptr).next;
-                let ptr = NonNull::new_unchecked(ptr as *mut u8);
-                Some(ptr)
+                Some(ptr as *mut u8)
             },
         }
     }
@@ -96,15 +95,15 @@ mod tests {
 
         {
             head.push(fst);
-            debug_assert_eq!(Some(fst), head.pop());
+            debug_assert_eq!(Some(fst.as_ptr()), head.pop());
             debug_assert_eq!(None, head.pop());
         }
 
         {
             head.push(fst);
             head.push(snd);
-            debug_assert_eq!(Some(snd), head.pop());
-            debug_assert_eq!(Some(fst), head.pop());
+            debug_assert_eq!(Some(snd.as_ptr()), head.pop());
+            debug_assert_eq!(Some(fst.as_ptr()), head.pop());
             debug_assert_eq!(None, head.pop());
         }
     }

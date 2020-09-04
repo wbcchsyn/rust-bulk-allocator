@@ -105,7 +105,7 @@ impl CacheChain {
                 None => continue,
                 Some(ptr) => {
                     let mut block = unsafe {
-                        let slice = core::slice::from_raw_parts(ptr.as_ptr(), it.size());
+                        let slice = core::slice::from_raw_parts(ptr, it.size());
                         From::from(slice)
                     };
 
@@ -316,7 +316,8 @@ mod tests {
                     let ptr = chain.caches[j.index()].pop();
                     if i == j {
                         assert!(ptr.is_some());
-                        assert!(is_fit_align(j.layout(), ptr.unwrap()));
+                        let ptr = NonNull::new(ptr.unwrap()).unwrap();
+                        assert!(is_fit_align(j.layout(), ptr));
 
                         let ptr = chain.caches[j.index()].pop();
                         assert!(ptr.is_none());
@@ -346,12 +347,14 @@ mod tests {
 
                     if (k == i) || (k == j) {
                         assert!(ptr.is_some());
-                        assert!(is_fit_align(k.layout(), ptr.unwrap()));
+                        let ptr = NonNull::new(ptr.unwrap()).unwrap();
+                        assert!(is_fit_align(k.layout(), ptr));
 
                         let ptr = chain.caches[k.index()].pop();
                         if i == j {
                             assert!(ptr.is_some());
-                            assert!(is_fit_align(k.layout(), ptr.unwrap()));
+                            let ptr = NonNull::new(ptr.unwrap()).unwrap();
+                            assert!(is_fit_align(k.layout(), ptr));
                         } else {
                             assert!(ptr.is_none());
                         }
