@@ -69,6 +69,16 @@ impl MemoryBlock {
     }
 }
 
+impl From<NonNull<[u8]>> for MemoryBlock {
+    fn from(ptr: NonNull<[u8]>) -> Self {
+        let mut ptr = ptr;
+        Self {
+            ptr: unsafe { NonNull::new_unchecked(ptr.as_mut().as_mut_ptr()) },
+            size: ptr.len(),
+        }
+    }
+}
+
 fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
     debug_assert!(count <= block.size);
 
