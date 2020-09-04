@@ -33,7 +33,6 @@ use crate::backend::Backend;
 use crate::cache_chain::CacheChain;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
-use crate::MemoryBlock;
 use crate::{MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{AllocErr, AllocRef, Layout};
 use core::mem::size_of;
@@ -151,10 +150,9 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                     None => {
                         // Make cache and try again
                         let chunk = self.backend.alloc(Self::MEMORY_CHUNK_LAYOUT)?;
-                        let chunk = MemoryBlock::from(chunk);
                         let (to_free, block) = split_memory_block(chunk, size_of::<PtrList>());
 
-                        self.to_free.push(to_free.ptr);
+                        self.to_free.push(to_free.cast::<u8>());
                         self.pool.fill_cache(block);
 
                         self.pool.pop(index).unwrap()
@@ -163,7 +161,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                     Some(block) => block,
                 };
 
-                Ok(block.to_slice())
+                Ok(block)
             }
         }
     }

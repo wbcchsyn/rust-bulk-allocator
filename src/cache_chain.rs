@@ -31,7 +31,6 @@
 
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
-use crate::MemoryBlock;
 use crate::{MAX_CACHE_SIZE, MIN_CACHE_SIZE};
 use core::alloc::Layout;
 use core::ptr::NonNull;
@@ -66,19 +65,19 @@ impl CacheChain {
         self.iter().find(|x| target <= x.size())
     }
 
-    pub fn fill_cache(&mut self, mut block: MemoryBlock) {
+    pub fn fill_cache(&mut self, mut block: NonNull<[u8]>) {
         let mut hint = self.iter();
         debug_assert!(is_fit(hint.layout(), block));
 
-        let mut make_cache = |i: CacheChainIter, block: MemoryBlock| -> MemoryBlock {
+        let mut make_cache = |i: CacheChainIter, block: NonNull<[u8]>| -> NonNull<[u8]> {
             let (f, s) = split_memory_block(block, i.size());
             debug_assert!(is_fit(i.layout(), f));
-            self.caches[i.index()].push(f.ptr);
+            self.caches[i.index()].push(block.cast::<u8>());
             s
         };
 
         // Increasing the hint and make cache
-        while is_fit_size(hint.layout(), block.size) {
+        while is_fit_size(hint.layout(), block.len()) {
             while is_fit(hint.layout(), block) {
                 hint.next();
                 if hint.is_end() {
@@ -90,8 +89,8 @@ impl CacheChain {
         }
 
         // Decreasing the hint and make cache
-        while 0 < block.size {
-            while !is_fit_size(hint.layout(), block.size) {
+        while 0 < block.len() {
+            while !is_fit_size(hint.layout(), block.len()) {
                 hint.next_back();
                 debug_assert!(!hint.is_end());
             }
@@ -100,25 +99,25 @@ impl CacheChain {
         }
     }
 
-    pub fn pop(&mut self, index: CacheChainIter) -> Option<MemoryBlock> {
+    pub fn pop(&mut self, index: CacheChainIter) -> Option<NonNull<[u8]>> {
         for mut it in index {
             match self.caches[it.index()].pop() {
                 None => continue,
                 Some(ptr) => {
-                    let mut block = MemoryBlock {
-                        ptr,
-                        size: it.size(),
+                    let mut block = unsafe {
+                        let slice = core::slice::from_raw_parts(ptr.as_ptr(), it.size());
+                        From::from(slice)
                     };
 
                     for _ in index.index()..it.index() {
                         it.next_back();
                         let (f, s) = split_memory_block(block, it.size());
-                        debug_assert_eq!(f.size, s.size);
-                        self.caches[it.index()].push(s.ptr);
+                        debug_assert_eq!(f.len(), s.len());
+                        self.caches[it.index()].push(block.cast::<u8>());
                         block = f;
                     }
 
-                    debug_assert_eq!(index.size(), block.size);
+                    debug_assert_eq!(index.size(), block.len());
                     return Some(block);
                 }
             }
@@ -141,8 +140,8 @@ fn is_fit_size(layout: Layout, size: usize) -> bool {
     layout.size() <= size
 }
 
-fn is_fit(layout: Layout, block: MemoryBlock) -> bool {
-    is_fit_size(layout, block.size) && is_fit_align(layout, block.ptr)
+fn is_fit(layout: Layout, block: NonNull<[u8]>) -> bool {
+    is_fit_size(layout, block.len()) && is_fit_align(layout, block.cast::<u8>())
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
@@ -283,20 +282,24 @@ mod tests {
     mod fill_cache_tests {
         use super::*;
 
-        fn allocate(size: usize, align: usize) -> MemoryBlock {
+        /// Returns pointer whose align fits to `align`, but not to `2 * align` .
+        fn allocate(size: usize, align: usize) -> NonNull<[u8]> {
             let layout = Layout::from_size_align(size + align, 2 * align).unwrap();
-            let ptr = unsafe { std::alloc::alloc(layout) };
-            let ptr = (ptr as usize) + align;
-            let ptr = NonNull::new(ptr as *mut u8).unwrap();
 
-            MemoryBlock { ptr, size }
+            unsafe {
+                let ptr = std::alloc::alloc(layout);
+                assert_eq!(false, ptr.is_null());
+
+                let slice = core::slice::from_raw_parts(ptr.add(align), size);
+                From::from(slice)
+            }
         }
 
-        fn deallocate(block: MemoryBlock, size: usize, align: usize) {
+        fn deallocate(block: NonNull<[u8]>, size: usize, align: usize) {
             let layout = Layout::from_size_align(size + align, 2 * align).unwrap();
-            let ptr = block.ptr.as_ptr() as usize;
-            let ptr = (ptr - align) as *mut u8;
             unsafe {
+                let ptr = block.cast::<u8>().as_ptr();
+                let ptr = ptr.sub(align);
                 std::alloc::dealloc(ptr, layout);
             }
         }

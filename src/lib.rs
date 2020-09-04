@@ -54,42 +54,14 @@ const MIN_CACHE_SIZE: usize = size_of::<PtrList>();
 // doesn't always make cache for MAX_CACHE_SIZE.
 const MEMORY_CHUNK_SIZE: usize = 8 * MAX_CACHE_SIZE;
 
-#[derive(Clone, Copy)]
-struct MemoryBlock {
-    ptr: NonNull<u8>,
-    size: usize,
-}
+fn split_memory_block<T>(block: NonNull<[T]>, count: usize) -> (NonNull<[T]>, NonNull<[T]>) {
+    debug_assert!(count <= block.len());
 
-impl MemoryBlock {
-    fn to_slice(self) -> NonNull<[u8]> {
-        unsafe {
-            let slice = core::slice::from_raw_parts(self.ptr.as_ptr(), self.size);
-            From::from(slice)
-        }
+    unsafe {
+        let fst = core::slice::from_raw_parts(block.as_ref().as_ptr(), count);
+        let snd =
+            core::slice::from_raw_parts(block.as_ref().as_ptr().add(count), block.len() - count);
+
+        (From::from(fst), From::from(snd))
     }
-}
-
-impl From<NonNull<[u8]>> for MemoryBlock {
-    fn from(ptr: NonNull<[u8]>) -> Self {
-        let mut ptr = ptr;
-        Self {
-            ptr: unsafe { NonNull::new_unchecked(ptr.as_mut().as_mut_ptr()) },
-            size: ptr.len(),
-        }
-    }
-}
-
-fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
-    debug_assert!(count <= block.size);
-
-    let fst = MemoryBlock {
-        ptr: block.ptr,
-        size: count,
-    };
-    let snd = MemoryBlock {
-        ptr: unsafe { NonNull::new_unchecked(((block.ptr.as_ptr() as usize) + count) as *mut u8) },
-        size: block.size - count,
-    };
-
-    (fst, snd)
 }
