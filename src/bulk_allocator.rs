@@ -152,10 +152,11 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                         // Make cache and try again
                         let chunk = self.backend.alloc(Self::MEMORY_CHUNK_LAYOUT)?;
                         let chunk = MemoryBlock::from(chunk);
-                        let (to_free, block) = split_memory_block(chunk, size_of::<PtrList>());
+                        let (to_free, block) =
+                            split_memory_block(chunk.to_slice(), size_of::<PtrList>());
 
-                        self.to_free.push(to_free.ptr);
-                        self.pool.fill_cache(block);
+                        self.to_free.push(MemoryBlock::from(to_free).ptr);
+                        self.pool.fill_cache(MemoryBlock::from(block));
 
                         self.pool.pop(index).unwrap()
                     }

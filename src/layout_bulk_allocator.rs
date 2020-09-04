@@ -167,18 +167,18 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
 
                 {
                     let first_size = self.memory_chunk_layout().size() - size_of::<PtrList>();
-                    let (f, s) = split_memory_block(block, first_size);
+                    let (f, s) = split_memory_block(block.to_slice(), first_size);
 
-                    debug_assert!(size_of::<PtrList>() <= s.size);
-                    self.to_free.push(s.ptr);
-                    block = f;
+                    debug_assert!(size_of::<PtrList>() <= s.len());
+                    self.to_free.push(MemoryBlock::from(s).ptr);
+                    block = MemoryBlock::from(f);
                 }
 
                 // Dispatch and pool the first space.
                 while size <= block.size {
-                    let (f, s) = split_memory_block(block, size);
-                    block = s;
-                    self.pool.push(f.ptr);
+                    let (f, s) = split_memory_block(block.to_slice(), size);
+                    block = MemoryBlock::from(s);
+                    self.pool.push(MemoryBlock::from(f).ptr);
                 }
 
                 ptr = self.pool.pop();

@@ -79,17 +79,14 @@ impl From<NonNull<[u8]>> for MemoryBlock {
     }
 }
 
-fn split_memory_block(block: MemoryBlock, count: usize) -> (MemoryBlock, MemoryBlock) {
-    debug_assert!(count <= block.size);
+fn split_memory_block<T>(block: NonNull<[T]>, count: usize) -> (NonNull<[T]>, NonNull<[T]>) {
+    debug_assert!(count <= block.len());
 
-    let fst = MemoryBlock {
-        ptr: block.ptr,
-        size: count,
-    };
-    let snd = MemoryBlock {
-        ptr: unsafe { NonNull::new_unchecked(((block.ptr.as_ptr() as usize) + count) as *mut u8) },
-        size: block.size - count,
-    };
+    unsafe {
+        let fst = core::slice::from_raw_parts(block.as_ref().as_ptr(), count);
+        let snd =
+            core::slice::from_raw_parts(block.as_ref().as_ptr().add(count), block.len() - count);
 
-    (fst, snd)
+        (From::from(fst), From::from(snd))
+    }
 }

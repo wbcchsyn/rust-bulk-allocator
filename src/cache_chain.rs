@@ -71,10 +71,10 @@ impl CacheChain {
         debug_assert!(is_fit(hint.layout(), block));
 
         let mut make_cache = |i: CacheChainIter, block: MemoryBlock| -> MemoryBlock {
-            let (f, s) = split_memory_block(block, i.size());
-            debug_assert!(is_fit(i.layout(), f));
-            self.caches[i.index()].push(f.ptr);
-            s
+            let (f, s) = split_memory_block(block.to_slice(), i.size());
+            debug_assert!(is_fit(i.layout(), MemoryBlock::from(f)));
+            self.caches[i.index()].push(MemoryBlock::from(f).ptr);
+            MemoryBlock::from(s)
         };
 
         // Increasing the hint and make cache
@@ -112,10 +112,10 @@ impl CacheChain {
 
                     for _ in index.index()..it.index() {
                         it.next_back();
-                        let (f, s) = split_memory_block(block, it.size());
-                        debug_assert_eq!(f.size, s.size);
-                        self.caches[it.index()].push(s.ptr);
-                        block = f;
+                        let (f, s) = split_memory_block(block.to_slice(), it.size());
+                        debug_assert_eq!(f.len(), s.len());
+                        self.caches[it.index()].push(MemoryBlock::from(f).ptr);
+                        block = MemoryBlock::from(f);
                     }
 
                     debug_assert_eq!(index.size(), block.size);
