@@ -141,7 +141,7 @@ impl<B: AllocRef> Drop for BulkAllocator<'_, B> {
 ///
 /// All the methods are thread unsafe.
 unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
-    fn alloc(&mut self, layout: Layout) -> Result<MemoryBlock, AllocErr> {
+    fn alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         match self.pool.find(layout) {
             // Too large for the pool
             None => self.backend.alloc(layout),
@@ -151,6 +151,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                     None => {
                         // Make cache and try again
                         let chunk = self.backend.alloc(Self::MEMORY_CHUNK_LAYOUT)?;
+                        let chunk = MemoryBlock::from(chunk);
                         let (to_free, block) = split_memory_block(chunk, size_of::<PtrList>());
 
                         self.to_free.push(to_free.ptr);
@@ -162,7 +163,7 @@ unsafe impl<B: AllocRef> AllocRef for BulkAllocator<'_, B> {
                     Some(block) => block,
                 };
 
-                Ok(block)
+                Ok(block.to_slice())
             }
         }
     }
@@ -238,13 +239,13 @@ mod tests {
 
             let block = alloc.alloc(layout).unwrap();
 
-            assert!(layout.size() <= block.size);
+            assert!(layout.size() <= block.len());
 
-            let ptr = block.ptr.as_ptr() as usize;
+            let ptr = unsafe { block.as_ref().as_ptr() } as usize;
             assert_eq!(0, ptr % layout.align());
 
             unsafe {
-                alloc.dealloc(block.ptr, layout);
+                alloc.dealloc(block.cast::<u8>(), layout);
             }
         };
 
@@ -282,7 +283,7 @@ mod tests {
             let layout = Layout::from_size_align(MAX_CACHE_SIZE, MAX_CACHE_SIZE).unwrap();
             let block = alloc.alloc(layout).unwrap();
             assert_eq!(1, alloc.memory_chunk_count());
-            unsafe { alloc.dealloc(block.ptr, layout) };
+            unsafe { alloc.dealloc(block.cast::<u8>(), layout) };
         }
 
         // Too large layouts doesn't affect to the chunk again.
