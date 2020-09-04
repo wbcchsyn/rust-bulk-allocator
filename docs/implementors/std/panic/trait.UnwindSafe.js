@@ -1,0 +1,3 @@
+(function() {var implementors = {};
+implementors["bulk_allocator"] = [{"text":"impl&lt;'a, B&gt; !UnwindSafe for BulkAllocator&lt;'a, B&gt;","synthetic":true,"types":[]},{"text":"impl&lt;'a, B&gt; !UnwindSafe for LayoutBulkAllocator&lt;'a, B&gt;","synthetic":true,"types":[]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

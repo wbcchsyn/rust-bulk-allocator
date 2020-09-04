@@ -1,0 +1,1 @@
+initSidebarItems({"constant":[["MAX_CACHE_SIZE","The maximum memory size BulkAllocator::alloc() uses the cache."]],"struct":[["BulkAllocator","`BulkAllocator` pools allocated memory and frees it on the destruction."],["LayoutBulkAllocator","`LayoutBulkAllocator` pools allocated memory and frees it on the destruction."]]});
