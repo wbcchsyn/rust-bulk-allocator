@@ -205,7 +205,6 @@ impl DoubleEndedIterator for CacheChainIter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::MemoryBlock;
 
     #[test]
     fn iterator_count() {
@@ -284,13 +283,16 @@ mod tests {
         use super::*;
 
         /// Returns pointer whose align fits to `align`, but not to `2 * align` .
-        fn allocate(size: usize, align: usize) -> MemoryBlock {
+        fn allocate(size: usize, align: usize) -> NonNull<[u8]> {
             let layout = Layout::from_size_align(size + align, 2 * align).unwrap();
-            let ptr = unsafe { std::alloc::alloc(layout) };
-            let ptr = (ptr as usize) + align;
-            let ptr = NonNull::new(ptr as *mut u8).unwrap();
 
-            MemoryBlock { ptr, size }
+            unsafe {
+                let ptr = std::alloc::alloc(layout);
+                assert_eq!(false, ptr.is_null());
+
+                let slice = core::slice::from_raw_parts(ptr.add(align), size);
+                From::from(slice)
+            }
         }
 
         fn deallocate(block: NonNull<[u8]>, size: usize, align: usize) {
@@ -308,7 +310,7 @@ mod tests {
                 let block = allocate(i.size(), i.size());
 
                 let mut chain = CacheChain::default();
-                chain.fill_cache(block.to_slice());
+                chain.fill_cache(block);
 
                 for j in chain.iter() {
                     let ptr = chain.caches[j.index()].pop();
@@ -323,7 +325,7 @@ mod tests {
                     }
                 }
 
-                deallocate(block.to_slice(), i.size(), i.size());
+                deallocate(block, i.size(), i.size());
             };
 
             for i in CacheChain::default().iter() {
@@ -337,7 +339,7 @@ mod tests {
                 let block = allocate(i.size() + j.size(), i.size());
 
                 let mut chain = CacheChain::default();
-                chain.fill_cache(block.to_slice());
+                chain.fill_cache(block);
 
                 for k in chain.iter() {
                     let ptr = chain.caches[k.index()].pop();
@@ -358,7 +360,7 @@ mod tests {
                     }
                 }
 
-                deallocate(block.to_slice(), i.size() + j.size(), i.size());
+                deallocate(block, i.size() + j.size(), i.size());
             };
 
             for i in CacheChain::default().iter() {
