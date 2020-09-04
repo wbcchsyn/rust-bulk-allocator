@@ -29,7 +29,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::MemoryBlock;
 use core::alloc::{AllocErr, AllocRef, Layout};
 use core::ptr::NonNull;
 use core::result::Result;
@@ -43,7 +42,7 @@ unsafe impl<B> AllocRef for Backend<'_, B>
 where
     B: AllocRef,
 {
-    fn alloc(&mut self, layout: Layout) -> Result<MemoryBlock, AllocErr> {
+    fn alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
         match self {
             Self::Borrowed(b) => b.alloc(layout),
             Self::Owned(b) => b.alloc(layout),
