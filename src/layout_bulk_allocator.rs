@@ -32,7 +32,6 @@
 use crate::backend::Backend;
 use crate::ptr_list::PtrList;
 use crate::split_memory_block;
-use crate::MemoryBlock;
 use crate::{MAX_CACHE_SIZE, MEMORY_CHUNK_SIZE, MIN_CACHE_SIZE};
 use core::alloc::{AllocErr, AllocRef, Layout};
 use core::mem::size_of;
@@ -162,34 +161,30 @@ unsafe impl<B: AllocRef> AllocRef for LayoutBulkAllocator<'_, B> {
 
             // Make cache and try again.
             if ptr.is_none() {
-                let block = self.backend.alloc(self.memory_chunk_layout())?;
-                let mut block = MemoryBlock::from(block);
-
+                let mut block = self.backend.alloc(self.memory_chunk_layout())?;
                 {
                     let first_size = self.memory_chunk_layout().size() - size_of::<PtrList>();
-                    let (f, s) = split_memory_block(block.to_slice(), first_size);
+                    let (f, s) = split_memory_block(block, first_size);
 
                     debug_assert!(size_of::<PtrList>() <= s.len());
-                    self.to_free.push(MemoryBlock::from(s).ptr);
-                    block = MemoryBlock::from(f);
+                    self.to_free.push(s.cast::<u8>());
+                    block = f;
                 }
 
                 // Dispatch and pool the first space.
-                while size <= block.size {
-                    let (f, s) = split_memory_block(block.to_slice(), size);
-                    block = MemoryBlock::from(s);
-                    self.pool.push(MemoryBlock::from(f).ptr);
+                while size <= block.len() {
+                    let (f, s) = split_memory_block(block, size);
+                    block = s;
+                    self.pool.push(f.cast::<u8>());
                 }
 
                 ptr = self.pool.pop();
             }
 
-            let block = MemoryBlock {
-                ptr: ptr.unwrap(),
-                size,
-            };
-
-            Ok(block.to_slice())
+            unsafe {
+                let slice = core::slice::from_raw_parts(ptr.unwrap().as_ptr(), size);
+                Ok(From::from(slice))
+            }
         }
     }
 
