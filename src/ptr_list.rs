@@ -39,11 +39,16 @@ pub struct PtrList {
 
 impl Default for PtrList {
     fn default() -> Self {
-        Self { next: None }
+        Self::new()
     }
 }
 
 impl PtrList {
+    /// Creates a new empty instance.
+    pub const fn new() -> Self {
+        Self { next: None }
+    }
+
     /// Returns a pooled pointer if any, or `None` .
     pub fn pop(&mut self) -> Option<*mut u8> {
         self.next.map(|ptr| unsafe {
@@ -80,6 +85,11 @@ impl PtrList {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new() {
+        let _ptr_list = PtrList::new();
+    }
 
     #[test]
     fn pop_and_push() {
