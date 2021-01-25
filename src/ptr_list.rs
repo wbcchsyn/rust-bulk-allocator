@@ -32,6 +32,7 @@
 use core::ptr::NonNull;
 
 /// Forming forward linked list
+#[derive(Debug, Clone, Copy)]
 pub struct PtrList {
     next: Option<*mut PtrList>,
 }
