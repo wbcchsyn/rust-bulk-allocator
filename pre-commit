@@ -1,40 +1,22 @@
 #!/bin/sh
 
-check_format() {
-    local path="$1"
-    rustfmt --check "$path"
-}
-
 check_license() {
     local path="$1"
-    grep -q "LGPL-3.0-or-later OR Apache-2.0" "$path"
-}
-
-check_rs() {
-    local path="$1"
-
-    if ! check_license "$path"; then
+    if ! grep -q "LGPL-3.0-or-later OR Apache-2.0" "$path"; then
         echo "$path lacks of the license." >&2
         exit 1
     fi
-
-    if ! check_format "$path"; then
-        echo "$path is wrong formatted." >&2
-        exit 1
-    fi
 }
-
 
 (
     cd `git rev-parse --show-toplevel`
 
-    for path in $(git status -s -uno | awk '/^[AM].*$/ { print $NF }'); do
-        if echo "$path" | grep -q "\.rs$"; then
-            check_rs "$path"
-        fi
+    for f in $(find src -name '*.rs' -type f); do
+        check_license "$f"
     done
 
-    cargo +nightly test || exit "$?"
+    cargo fmt -- --check || exit "$?"
+    cargo test || exit "$?"
 
     exit 0
 )

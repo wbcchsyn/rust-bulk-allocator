@@ -29,39 +29,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(allocator_api, external_doc, slice_ptr_len)]
-#![doc(include = "../README.md")]
+//! bulk-allocator is implementations for AllocRef.
+//! They pool allocated memory and release them on the destruction.
+//!
+//! Method `dealloc` caches the released memory and `alloc` reuses it.
+//! If no cache is left, `alloc` acquires a memory chunk from the backend and make cache at first.
+//!
+//! Using cache effectively, the performance is better compared to the same name functions in `std::alloc`.
+//!
+//! # Note
+//!
+//! Trait `AllocRef` is defined only in Rust nightly toolchain so far.
+//! It is required to enable feathre `allocator_api` to use this crate and `AllocRef`.
+//!
+//! # Implementations
+//!
+//! ## BulkAllocator
+//!
+//! `AllocRef` method `alloc` and `dealloc` delegate the request to the backend if the argument `layout`
+//! is too large to cache; otherwise, `dealloc` stores the released memory and `alloc` dispatches it and return.
+//!
+//! If the argument `layout` is always same, probably `LayoutBulkAllocator` is better.
+//!
+//! All methods in `AllocRef` are thread unsafe.
+//!
+//! ## LayoutBulkAllocator
+//!
+//! `LayoutBulkAllocator` behaves like `BulkAllocator` except for the constructor requires `Layout` as the argument.
+//!
+//! The instance uses cache only when the argument `layout` is same to what the constructor is passed; otherwise,
+//! the requests are delegated to the backend.
 
-mod backend;
-mod bulk_allocator;
-mod cache_chain;
-mod layout_bulk_allocator;
 mod ptr_list;
-
-pub use crate::bulk_allocator::BulkAllocator;
-pub use crate::layout_bulk_allocator::LayoutBulkAllocator;
-use crate::ptr_list::PtrList;
-use core::mem::size_of;
-use core::ptr::NonNull;
-
-/// The maximum memory size BulkAllocator::alloc() uses the cache.
-pub const MAX_CACHE_SIZE: usize = 1024;
-/// The minimum memory size BulkAllocator::alloc() returns.
-const MIN_CACHE_SIZE: usize = size_of::<PtrList>();
-/// Memory chunk size BulkAllocator allocate from the backend.
-//
-// This must equal to 2 * MAX_CACHE_SIZE or larger; otherwise BulkAllocator
-// doesn't always make cache for MAX_CACHE_SIZE.
-const MEMORY_CHUNK_SIZE: usize = 8 * MAX_CACHE_SIZE;
-
-fn split_memory_block<T>(block: NonNull<[T]>, count: usize) -> (NonNull<[T]>, NonNull<[T]>) {
-    debug_assert!(count <= block.len());
-
-    unsafe {
-        let fst = core::slice::from_raw_parts(block.as_ref().as_ptr(), count);
-        let snd =
-            core::slice::from_raw_parts(block.as_ref().as_ptr().add(count), block.len() - count);
-
-        (From::from(fst), From::from(snd))
-    }
-}
