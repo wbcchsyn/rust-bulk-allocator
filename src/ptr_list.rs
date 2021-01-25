@@ -43,6 +43,7 @@ impl Default for PtrList {
 }
 
 impl PtrList {
+    /// Returns a pooled pointer if any, or `None` .
     pub fn pop(&mut self) -> Option<*mut u8> {
         self.next.map(|ptr| unsafe {
             self.next = (&*ptr).next;
@@ -50,6 +51,7 @@ impl PtrList {
         })
     }
 
+    /// Pools `ptr` into `self` .
     pub fn push(&mut self, ptr: NonNull<u8>) {
         let mut ptr = ptr.cast::<Self>();
 
@@ -60,6 +62,7 @@ impl PtrList {
         self.next = Some(ptr.as_ptr());
     }
 
+    /// Returns the number of following lists to `self` .
     #[cfg(test)]
     pub fn len(&self) -> usize {
         let mut next = self.next;
