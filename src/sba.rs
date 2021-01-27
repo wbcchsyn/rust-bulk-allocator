@@ -518,6 +518,11 @@ where
     pub fn layout(&self) -> Layout {
         self.inner.layout()
     }
+
+    /// Provides a reference to the backend allocator.
+    pub fn backend(&self) -> &B {
+        &self.inner.backend()
+    }
 }
 
 #[cfg(test)]
