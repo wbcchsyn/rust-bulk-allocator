@@ -277,6 +277,9 @@ mod cache_tests {
 /// allocated via the instance will be invalid after the instance drop. Accessing such a pointer
 /// may lead memory unsafety even if the pointer itself is not deallocated.
 ///
+/// This struct is similar to [`Sba`] except for the behavior when `alloc` and `dealloc` was
+/// passed different argument `Layout` from that is passed to the constructor. See also [`Sba`] .
+///
 /// # Warnings
 ///
 /// The allocated pointers via `Usba` will be invalid after the instance is dropped. Accessing such
@@ -288,6 +291,7 @@ mod cache_tests {
 /// the constructor.
 ///
 /// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
+/// [`Sba`]: struct.Sba.html
 pub struct Usba<B>
 where
     B: GlobalAlloc,
@@ -418,4 +422,49 @@ mod usba_tests {
             usba.dealloc(ptr, layout);
         }
     }
+}
+
+/// 'Sba' stands for 'Single-layout-cache Bulk Allocator'.
+/// This implements `GlobalAlloc` . It allocates and caches bulk memory from the backend, and
+/// deallocates them on the drop at once.
+///
+/// Constructor takes a `Layout` as the argument, and builds instance with cache for memories which
+/// fits the `Layout` .
+///
+/// Method `alloc` delegates the request to the backend allocator if specified `Layout` is
+/// different from that is passed to the constructor.
+/// Otherwise, `alloc` searches the cache for an available pointer and returns it. If the cache is
+/// empty, `alloc` allocates a memory chunk from the backend allocator, splits the chunk into
+/// pieces to fit the `Layout` , and makes cache at first.
+///
+/// The size of the bulk memory is usualy same to [`MEMORY_CHUNK_SIZE`] , however, if the `Layout`
+/// is too large, the size exceeds [`MEMORY_CHUNK_SIZE`] .
+///
+/// Method `dealloc` delegates the request to the backend allocator if specified `Layout` is
+/// different from that is passed to the constructor; otherwise `dealloc` caches the pointer. i.e.
+/// the memory will not be freed then. It is when the instance is dropped to deallocate the
+/// memories.
+///
+/// Instance drop releases all the memory chunks using the backend allocator. Pointers allocated
+/// via the instance will be invalid after the instance drop if the argument `Layout` is same
+/// between the constructor and method `alloc` . Accessing such a pointer may lead memory unsafety
+/// even if the pointer itself is not deallocated.
+///
+/// This struct is similar to [`Usba`] except for the behavior when `alloc` and `dealloc` was
+/// passed different argument `Layout` from that is passed to the constructor. See also [`Usba`] .
+///
+/// # Warnings
+///
+/// Pointers allocated vir the instance will be invalid after the instance drop if the argument
+/// `Layout` is same between the constructor and method `alloc` . Accessing such a pointer may lead
+/// memory unsafety even if the pointer itself is not deallocated.
+///
+///
+/// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
+/// [`Usba`]: struct.Usba.html
+pub struct Sba<B>
+where
+    B: GlobalAlloc,
+{
+    inner: Usba<B>,
 }
