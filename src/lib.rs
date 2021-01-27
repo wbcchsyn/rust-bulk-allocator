@@ -61,3 +61,5 @@
 //! the requests are delegated to the backend.
 
 mod ptr_list;
+
+use ptr_list::PtrList;

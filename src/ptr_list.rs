@@ -32,17 +32,24 @@
 use core::ptr::NonNull;
 
 /// Forming forward linked list
+#[derive(Debug, Clone, Copy)]
 pub struct PtrList {
     next: Option<*mut PtrList>,
 }
 
 impl Default for PtrList {
     fn default() -> Self {
-        Self { next: None }
+        Self::new()
     }
 }
 
 impl PtrList {
+    /// Creates a new empty instance.
+    pub const fn new() -> Self {
+        Self { next: None }
+    }
+
+    /// Returns a pooled pointer if any, or `None` .
     pub fn pop(&mut self) -> Option<*mut u8> {
         self.next.map(|ptr| unsafe {
             self.next = (&*ptr).next;
@@ -50,6 +57,7 @@ impl PtrList {
         })
     }
 
+    /// Pools `ptr` into `self` .
     pub fn push(&mut self, ptr: NonNull<u8>) {
         let mut ptr = ptr.cast::<Self>();
 
@@ -60,6 +68,7 @@ impl PtrList {
         self.next = Some(ptr.as_ptr());
     }
 
+    /// Returns the number of following lists to `self` .
     #[cfg(test)]
     pub fn len(&self) -> usize {
         let mut next = self.next;
@@ -76,6 +85,11 @@ impl PtrList {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new() {
+        let _ptr_list = PtrList::new();
+    }
 
     #[test]
     fn pop_and_push() {
