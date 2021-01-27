@@ -66,3 +66,8 @@ mod ptr_list;
 mod sba;
 
 use ptr_list::PtrList;
+
+/// The default byte count of bulk memory that this crate allocates from the backend if no cache
+/// is.
+/// Note that if too large layout is requested, the bulk size may exceed this value.
+pub const MEMORY_CHUNK_SIZE: usize = 16384; // 16 KB
