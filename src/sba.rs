@@ -29,7 +29,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::PtrList;
+use crate::{PtrList, MEMORY_CHUNK_SIZE};
+use core::alloc::{GlobalAlloc, Layout};
+use core::mem::{align_of, size_of};
 
 /// Structure for `Sba` and `Usba` .
 struct Cache {
@@ -52,14 +54,56 @@ impl Cache {
             pool: PtrList::new(),
         }
     }
+
+    /// Frees all the bulk memories via `backend`.
+    pub fn destroy<B>(&mut self, layout: Layout, backend: &B)
+    where
+        B: GlobalAlloc,
+    {
+        let layout = Self::backend_layout(layout);
+        while let Some(ptr) = self.to_free.pop() {
+            debug_assert_eq!(false, ptr.is_null());
+            unsafe { backend.dealloc(ptr, layout) };
+        }
+    }
+
+    fn align(layout: Layout) -> usize {
+        usize::max(layout.align(), align_of::<PtrList>())
+    }
+
+    fn element_layout(layout: Layout) -> Layout {
+        let align = Self::align(layout);
+        let size = usize::max(layout.size(), size_of::<PtrList>());
+        let layout = unsafe { Layout::from_size_align_unchecked(size, align) };
+        layout.pad_to_align()
+    }
+
+    fn to_free_layout(layout: Layout) -> Layout {
+        let align = Self::align(layout);
+        let size = size_of::<PtrList>();
+        let layout = unsafe { Layout::from_size_align_unchecked(size, align) };
+        layout.pad_to_align()
+    }
+
+    fn backend_layout(layout: Layout) -> Layout {
+        let align = Self::align(layout);
+        let min_size = Self::element_layout(layout).size() + Self::to_free_layout(layout).size();
+        let size = usize::max(min_size, MEMORY_CHUNK_SIZE);
+        unsafe { Layout::from_size_align_unchecked(size, align) }
+    }
 }
 
 #[cfg(test)]
 mod cache_tests {
     use super::*;
+    use gharial::GAlloc;
 
     #[test]
     fn new() {
-        let _cache = Cache::new();
+        let layout = Layout::new::<usize>();
+        let backend = GAlloc::default();
+
+        let mut cache = Cache::new();
+        cache.destroy(layout, &backend);
     }
 }
