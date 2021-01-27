@@ -497,6 +497,29 @@ where
     }
 }
 
+impl<B> Sba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Returns same `Layout` that is passed to the constructor.
+    /// The cache is build for this `Layout` and method `alloc` can take only this value as the
+    /// argument; otherwise `alloc` causes an assertion error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bulk_allocator::Sba;
+    /// use std::alloc::{Layout, System};
+    ///
+    /// let layout = Layout::new::<usize>();
+    /// let sba = Sba::new(layout, System);
+    /// assert_eq!(layout, sba.layout());
+    /// ```
+    pub fn layout(&self) -> Layout {
+        self.inner.layout()
+    }
+}
+
 #[cfg(test)]
 mod sba_tests {
     use super::*;
