@@ -468,3 +468,43 @@ where
 {
     inner: Usba<B>,
 }
+
+impl<B> Sba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Creates a new instance with empty cache.
+    ///
+    /// The cache is built for memories to fit `layout` and method `alloc` uses the cache only when
+    /// the same `layout` is passed; otherwise `alloc` just delegates the request to the backend.
+    ///
+    /// `backend` is an allocator to allocate memory chunks to make cache. It is also used to
+    /// deallocate the memory chunks on the drop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bulk_allocator::Sba;
+    /// use std::alloc::{Layout, System};
+    ///
+    /// let layout = Layout::new::<usize>();
+    /// let _sba = Sba::new(layout, System);
+    /// ```
+    pub fn new(layout: Layout, backend: B) -> Self {
+        Self {
+            inner: Usba::new(layout, backend),
+        }
+    }
+}
+
+#[cfg(test)]
+mod sba_tests {
+    use super::*;
+    use gharial::GAlloc;
+
+    #[test]
+    fn new() {
+        let layout = Layout::new::<usize>();
+        let _sba = Sba::new(layout, GAlloc::default());
+    }
+}
