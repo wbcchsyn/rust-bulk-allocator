@@ -51,3 +51,23 @@ impl Drop for Cache {
         debug_assert_eq!(None, self.to_free.pop());
     }
 }
+
+impl Cache {
+    /// Creates a new empty instance.
+    pub const fn new() -> Self {
+        Self {
+            to_free: PtrList::new(),
+            pools: [PtrList::new(); Self::POOLS_LEN],
+        }
+    }
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::*;
+
+    #[test]
+    fn new() {
+        let _cache = Cache::new();
+    }
+}
