@@ -311,6 +311,36 @@ impl<B> Usba<B>
 where
     B: GlobalAlloc,
 {
+    /// Creates a new instance with empty cache.
+    ///
+    /// The cache is built for memories to fit `layout` and method `alloc` can take same value as
+    /// the argument; otherwise `alloc` causes an assertion error.
+    ///
+    /// `backend` is an allocator to allocate memory chunks to make cache. It is also used to
+    /// deallocate the memory chunks on the drop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bulk_allocator::Usba;
+    /// use std::alloc::{Layout, System};
+    ///
+    /// let layout = Layout::new::<usize>();
+    /// let _usba = Usba::new(layout, System);
+    /// ```
+    pub fn new(layout: Layout, backend: B) -> Self {
+        Self {
+            layout_: layout,
+            cache: UnsafeCell::new(Cache::new()),
+            backend_: backend,
+        }
+    }
+}
+
+impl<B> Usba<B>
+where
+    B: GlobalAlloc,
+{
     /// Returns same `Layout` that is passed to the constructor.
     /// The cache is build for this `Layout` and method `alloc` can take only this value as the
     /// argument; otherwise `alloc` causes an assertion error.
@@ -321,5 +351,17 @@ where
     /// Provides a reference to the backend allocator.
     pub fn backend(&self) -> &B {
         &self.backend_
+    }
+}
+
+#[cfg(test)]
+mod usba_tests {
+    use super::*;
+    use gharial::GAlloc;
+
+    #[test]
+    fn new() {
+        let layout = Layout::new::<u8>();
+        let _usba = Usba::new(layout, GAlloc::default());
     }
 }
