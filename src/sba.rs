@@ -307,4 +307,9 @@ where
     pub fn layout(&self) -> Layout {
         self.layout_
     }
+
+    /// Provides a reference to the backend allocator.
+    pub fn backend(&self) -> &B {
+        &self.backend_
+    }
 }
