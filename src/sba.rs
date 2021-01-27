@@ -254,10 +254,45 @@ mod cache_tests {
     }
 }
 
+/// 'Usba' stands for 'Unsafe Single-layout-cache Bulk Allocator'.
+/// This implements `GlobalAlloc` . It allocates and caches bulk memory from the backend, and
+/// deallocates them on the drop at once.
+///
+/// Constructor takes a `Layout` as the argument, and builds instance with cache for memories which
+/// fits the `Layout` .
+///
+/// Method `alloc` causes an assertion error if the specified `Layout` is different from that is
+/// passed to the constructor. (This is why named as 'Unsafe'.)
+/// Otherwise, `alloc` searches the cache for an available pointer and returns it. If the cache is
+/// empty, `alloc` allocates a memory chunk from the backend allocator, splits the chunk into
+/// pieces to fit the `Layout` , and makes cache at first.
+///
+/// The size of the bulk memory is usualy same to [`MEMORY_CHUNK_SIZE`] , however, if the `Layout`
+/// is too large, the size exceeds [`MEMORY_CHUNK_SIZE`] .
+///
+/// Method `dealloc` always caches the passed pointer. i.e. the memory will not be freed then. It
+/// is when the instance is dropped to deallocate the memories.
+///
+/// Instance drop releases all the memory chunks using the backend allocator. All the pointers
+/// allocated via the instance will be invalid after the instance drop. Accessing such a pointer
+/// may lead memory unsafety even if the pointer itself is not deallocated.
+///
+/// # Warnings
+///
+/// The allocated pointers via `Usba` will be invalid after the instance is dropped. Accessing such
+/// a pointer may lead memory unsafety evenn if the pointer itself is not deallocated.
+///
+/// # Errors
+///
+/// `alloc` causes an assertion error if the specified `Layout` is different from that is passed to
+/// the constructor.
+///
+/// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
 pub struct Usba<B>
 where
     B: GlobalAlloc,
 {
+    layout_: Layout,
     cache: UnsafeCell<Cache>,
-    backend: B,
+    backend_: B,
 }
