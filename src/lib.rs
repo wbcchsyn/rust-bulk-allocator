@@ -63,5 +63,6 @@
 //! the requests are delegated to the backend.
 
 mod ptr_list;
+mod sba;
 
 use ptr_list::PtrList;
