@@ -66,7 +66,7 @@ mod ptr_list;
 mod sba;
 
 use ptr_list::PtrList;
-pub use sba::Usba;
+pub use sba::{Sba, Usba};
 
 /// The default byte count of bulk memory that this crate allocates from the backend if no cache
 /// is.
