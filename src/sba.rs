@@ -297,6 +297,16 @@ where
     backend_: B,
 }
 
+impl<B> Drop for Usba<B>
+where
+    B: GlobalAlloc,
+{
+    fn drop(&mut self) {
+        let cache = unsafe { &mut *self.cache.get() };
+        cache.destroy(self.layout(), self.backend());
+    }
+}
+
 impl<B> Usba<B>
 where
     B: GlobalAlloc,
