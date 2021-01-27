@@ -36,3 +36,10 @@ struct Cache {
     to_free: PtrList,
     pool: PtrList,
 }
+
+impl Drop for Cache {
+    fn drop(&mut self) {
+        // Make sure 'self.to_free' is empty.
+        debug_assert_eq!(None, self.to_free.pop());
+    }
+}
