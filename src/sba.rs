@@ -469,6 +469,15 @@ where
     inner: Usba<B>,
 }
 
+impl<B> From<Layout> for Sba<B>
+where
+    B: Default + GlobalAlloc,
+{
+    fn from(layout: Layout) -> Self {
+        Self::new(layout, B::default())
+    }
+}
+
 impl<B> Sba<B>
 where
     B: GlobalAlloc,
