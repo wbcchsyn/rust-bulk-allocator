@@ -344,6 +344,17 @@ where
     /// Returns same `Layout` that is passed to the constructor.
     /// The cache is build for this `Layout` and method `alloc` can take only this value as the
     /// argument; otherwise `alloc` causes an assertion error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bulk_allocator::Usba;
+    /// use std::alloc::{Layout, System};
+    ///
+    /// let layout = Layout::new::<usize>();
+    /// let usba = Usba::new(layout, System);
+    /// assert_eq!(layout, usba.layout());
+    /// ```
     pub fn layout(&self) -> Layout {
         self.layout_
     }
