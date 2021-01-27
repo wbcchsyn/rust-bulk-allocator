@@ -29,8 +29,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::PtrList;
-use core::mem::size_of;
+use crate::{PtrList, MEMORY_CHUNK_SIZE};
+use core::alloc::{GlobalAlloc, Layout};
+use core::mem::{align_of, size_of};
 
 /// Inner type of 'Ba' and 'Uba'.
 pub struct Cache {
@@ -60,14 +61,44 @@ impl Cache {
             pools: [PtrList::new(); Self::POOLS_LEN],
         }
     }
+
+    /// Deallocates all the allocated memory chunks and clears `self.to_free` .
+    pub fn destroy<B>(&mut self, backend: &B)
+    where
+        B: GlobalAlloc,
+    {
+        let layout = Self::backend_layout();
+        while let Some(ptr) = self.to_free.pop() {
+            unsafe { backend.dealloc(ptr, layout) };
+        }
+    }
+
+    const fn align() -> usize {
+        // Same to usize::max(align_of::<PtrList>(), align_of::<u128>()).
+        // (usize::max is not a const function.)
+        if align_of::<PtrList>() < align_of::<u128>() {
+            align_of::<u128>()
+        } else {
+            align_of::<PtrList>()
+        }
+    }
+
+    const fn backend_layout() -> Layout {
+        let size = MEMORY_CHUNK_SIZE;
+        let align = Self::align();
+        unsafe { Layout::from_size_align_unchecked(size, align) }
+    }
 }
 
 #[cfg(test)]
 mod cache_tests {
     use super::*;
+    use gharial::GAlloc;
 
     #[test]
     fn new() {
-        let _cache = Cache::new();
+        let backend = GAlloc::default();
+        let mut cache = Cache::new();
+        cache.destroy(&backend);
     }
 }
