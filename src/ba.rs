@@ -32,6 +32,7 @@
 use crate::{PtrList, MEMORY_CHUNK_SIZE};
 use core::alloc::{GlobalAlloc, Layout};
 use core::mem::{align_of, size_of};
+use core::ptr::NonNull;
 
 /// Inner type of 'Ba' and 'Uba'.
 pub struct Cache {
@@ -71,6 +72,51 @@ impl Cache {
         while let Some(ptr) = self.to_free.pop() {
             unsafe { backend.dealloc(ptr, layout) };
         }
+    }
+
+    /// Pools `ptr` to the cache.
+    ///
+    /// Causes an assertion error if `layout` is not in the range to be cached.
+    pub unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
+        debug_assert_eq!(false, ptr.is_null());
+
+        let layout = Self::fit_layout(layout).unwrap();
+        let index = Self::pools_index(layout);
+
+        let ptr = NonNull::new_unchecked(ptr);
+        self.pools[index].push(ptr);
+    }
+
+    fn fit_layout(layout: Layout) -> Option<Layout> {
+        // 'size' is the minimum number satisfying followings.
+        // - a Power of 2.
+        // - layout.size() <= size
+        let size = if layout.size().count_ones() == 1 {
+            layout.size()
+        } else {
+            (usize::MAX >> layout.size().leading_zeros()) as usize + 1
+        };
+        debug_assert_eq!(1, size.count_ones());
+        debug_assert!(layout.size() <= size);
+        debug_assert!(size <= 2 * layout.size());
+
+        let size = usize::max(Self::MIN_CACHE_SIZE, size);
+        let layout = unsafe { Layout::from_size_align_unchecked(size, Self::align()) };
+        let layout = layout.pad_to_align();
+
+        if Self::MAX_CACHE_SIZE < layout.size() {
+            None
+        } else {
+            Some(layout)
+        }
+    }
+
+    fn pools_index(layout: Layout) -> usize {
+        debug_assert!(layout.size() <= Self::MAX_CACHE_SIZE);
+        debug_assert!(Self::MIN_CACHE_SIZE <= layout.size());
+        debug_assert_eq!(1, layout.size().count_ones());
+
+        (layout.size().leading_zeros() - Self::MAX_CACHE_SIZE.leading_zeros()) as usize
     }
 
     const fn align() -> usize {
