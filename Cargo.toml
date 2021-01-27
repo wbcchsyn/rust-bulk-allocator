@@ -18,3 +18,6 @@ categories = ["memory-management"]
 travis-ci = { repository = "wbcchsyn/rust-bulk-allocator" }
 
 [dependencies]
+
+[dev-dependencies]
+gharial = "0.3"
