@@ -44,3 +44,10 @@ impl Cache {
     const POOLS_LEN: usize =
         (Self::MIN_CACHE_SIZE.leading_zeros() - Self::MAX_CACHE_SIZE.leading_zeros() + 1) as usize;
 }
+
+impl Drop for Cache {
+    fn drop(&mut self) {
+        // Make sure 'self.to_free' is empty.
+        debug_assert_eq!(None, self.to_free.pop());
+    }
+}
