@@ -28,3 +28,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+use crate::PtrList;
+use core::mem::size_of;
+
+/// Inner type of 'Ba' and 'Uba'.
+pub struct Cache {
+    to_free: PtrList,
+    pools: [PtrList; Self::POOLS_LEN],
+}
+
+impl Cache {
+    pub const MAX_CACHE_SIZE: usize = 4096; // 4 KB.
+    pub const MIN_CACHE_SIZE: usize = size_of::<PtrList>();
+    const POOLS_LEN: usize =
+        (Self::MIN_CACHE_SIZE.leading_zeros() - Self::MAX_CACHE_SIZE.leading_zeros() + 1) as usize;
+}
