@@ -31,6 +31,7 @@
 
 use crate::{PtrList, MEMORY_CHUNK_SIZE};
 use core::alloc::{GlobalAlloc, Layout};
+use core::cell::UnsafeCell;
 use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 
@@ -251,4 +252,12 @@ mod cache_tests {
             }
         }
     }
+}
+
+pub struct Usba<B>
+where
+    B: GlobalAlloc,
+{
+    cache: UnsafeCell<Cache>,
+    backend: B,
 }
