@@ -296,3 +296,15 @@ where
     cache: UnsafeCell<Cache>,
     backend_: B,
 }
+
+impl<B> Usba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Returns same `Layout` that is passed to the constructor.
+    /// The cache is build for this `Layout` and method `alloc` can take only this value as the
+    /// argument; otherwise `alloc` causes an assertion error.
+    pub fn layout(&self) -> Layout {
+        self.layout_
+    }
+}
