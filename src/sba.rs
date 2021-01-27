@@ -75,6 +75,50 @@ impl Cache {
         self.pool.push(ptr);
     }
 
+    /// Pops from the cache and returns. If cache is empty, allocates memory chunk from `backend`
+    /// and makes cache at first.
+    pub fn alloc<B>(&mut self, layout: Layout, backend: &B) -> *mut u8
+    where
+        B: GlobalAlloc,
+    {
+        // Search the cache at first.
+        if let Some(ptr) = self.pool.pop() {
+            return ptr;
+        }
+
+        // If no cache is, allocate memory chunk.
+        let (begin, end) = unsafe {
+            let layout = Self::backend_layout(layout);
+            let begin = backend.alloc(layout);
+            if begin.is_null() {
+                // Returns null pointer on fail.
+                return begin;
+            }
+            let end = begin.add(layout.size());
+            (begin, end)
+        };
+
+        // Use the first position of the chunk as to_free link.
+        {
+            let ptr = unsafe { NonNull::new_unchecked(begin) };
+            self.to_free.push(ptr);
+        }
+
+        // Split into small pieces and make cache
+        unsafe {
+            // Shift ptr by the size of to_free link.
+            let mut ptr = begin.add(Self::to_free_layout(layout).size());
+            let size = Self::element_layout(layout).size();
+
+            while (size as isize) <= end.offset_from(ptr) {
+                self.pool.push(NonNull::new_unchecked(ptr));
+                ptr = ptr.add(size);
+            }
+        }
+
+        self.pool.pop().unwrap()
+    }
+
     fn align(layout: Layout) -> usize {
         usize::max(layout.align(), align_of::<PtrList>())
     }
@@ -105,6 +149,20 @@ impl Cache {
 mod cache_tests {
     use super::*;
     use gharial::GAlloc;
+    use std::collections::HashSet;
+
+    const SMALL_SIZES: &[usize] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 63, 64, 65];
+    const LARGE_SIZES: &[usize] = &[
+        MEMORY_CHUNK_SIZE - 1,
+        MEMORY_CHUNK_SIZE,
+        MEMORY_CHUNK_SIZE + 1,
+    ];
+    const SMALL_ALIGNS: &[usize] = &[1, 2, 4, 8, 16];
+    const LARGE_ALIGNS: &[usize] = &[
+        MEMORY_CHUNK_SIZE / 2,
+        MEMORY_CHUNK_SIZE,
+        MEMORY_CHUNK_SIZE * 2,
+    ];
 
     #[test]
     fn new() {
@@ -113,5 +171,84 @@ mod cache_tests {
 
         let mut cache = Cache::new();
         cache.destroy(layout, &backend);
+    }
+
+    #[test]
+    fn alloc_small() {
+        let check = |layout| {
+            let backend = GAlloc::default();
+            let mut cache = Cache::new();
+            let mut pointers = HashSet::with_capacity(MEMORY_CHUNK_SIZE);
+
+            for _ in 0..MEMORY_CHUNK_SIZE {
+                let ptr = cache.alloc(layout, &backend);
+                assert_eq!(true, pointers.insert(ptr));
+            }
+
+            for &ptr in pointers.iter() {
+                cache.dealloc(ptr);
+            }
+
+            cache.destroy(layout, &backend);
+        };
+
+        for &size in SMALL_SIZES {
+            for &align in SMALL_ALIGNS {
+                let layout = Layout::from_size_align(size, align).unwrap();
+                check(layout);
+            }
+        }
+    }
+
+    #[test]
+    fn alloc_large() {
+        let check = |layout| {
+            let backend = GAlloc::default();
+            let mut cache = Cache::new();
+            let mut pointers = HashSet::with_capacity(3);
+
+            for _ in 0..3 {
+                let ptr = cache.alloc(layout, &backend);
+                assert_eq!(true, pointers.insert(ptr));
+            }
+
+            for &ptr in pointers.iter() {
+                cache.dealloc(ptr);
+            }
+
+            cache.destroy(layout, &backend);
+        };
+
+        for &size in SMALL_SIZES.iter().chain(LARGE_SIZES.iter()) {
+            for &align in SMALL_ALIGNS.iter().chain(LARGE_ALIGNS.iter()) {
+                let layout = Layout::from_size_align(size, align).unwrap();
+                check(layout);
+            }
+        }
+    }
+
+    #[test]
+    fn alloc_effectivity() {
+        let check = |layout| {
+            let backend = GAlloc::default();
+            let mut cache = Cache::new();
+
+            for _ in 0..MEMORY_CHUNK_SIZE {
+                let ptr = cache.alloc(layout, &backend);
+                cache.dealloc(ptr);
+
+                // Make sure only one memory chunk is.
+                assert_eq!(1, cache.to_free.len());
+            }
+
+            cache.destroy(layout, &backend);
+        };
+
+        for &size in SMALL_SIZES.iter().chain(LARGE_SIZES.iter()) {
+            for &align in SMALL_ALIGNS.iter().chain(LARGE_ALIGNS.iter()) {
+                let layout = Layout::from_size_align(size, align).unwrap();
+                check(layout);
+            }
+        }
     }
 }
