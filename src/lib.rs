@@ -62,6 +62,7 @@
 //! The instance uses cache only when the argument `layout` is same to what the constructor is passed; otherwise,
 //! the requests are delegated to the backend.
 
+mod ba;
 mod ptr_list;
 mod sba;
 
