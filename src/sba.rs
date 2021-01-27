@@ -32,6 +32,7 @@
 use crate::{PtrList, MEMORY_CHUNK_SIZE};
 use core::alloc::{GlobalAlloc, Layout};
 use core::mem::{align_of, size_of};
+use core::ptr::NonNull;
 
 /// Structure for `Sba` and `Usba` .
 struct Cache {
@@ -65,6 +66,13 @@ impl Cache {
             debug_assert_eq!(false, ptr.is_null());
             unsafe { backend.dealloc(ptr, layout) };
         }
+    }
+
+    /// Pools `ptr` to the cache.
+    pub fn dealloc(&mut self, ptr: *mut u8) {
+        debug_assert_eq!(false, ptr.is_null());
+        let ptr = unsafe { NonNull::new_unchecked(ptr) };
+        self.pool.push(ptr);
     }
 
     fn align(layout: Layout) -> usize {
