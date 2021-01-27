@@ -297,6 +297,8 @@ where
     backend_: B,
 }
 
+unsafe impl<B> Send for Usba<B> where B: Send + GlobalAlloc {}
+
 impl<B> Drop for Usba<B>
 where
     B: GlobalAlloc,
