@@ -337,6 +337,26 @@ where
     }
 }
 
+unsafe impl<B> GlobalAlloc for Usba<B>
+where
+    B: GlobalAlloc,
+{
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        assert_eq!(self.layout(), layout);
+
+        let cache = &mut *self.cache.get();
+        cache.alloc(layout, self.backend())
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        debug_assert_eq!(false, ptr.is_null());
+        debug_assert_eq!(self.layout(), layout);
+
+        let cache = &mut *self.cache.get();
+        cache.dealloc(ptr)
+    }
+}
+
 impl<B> Usba<B>
 where
     B: GlobalAlloc,
@@ -374,5 +394,17 @@ mod usba_tests {
     fn new() {
         let layout = Layout::new::<u8>();
         let _usba = Usba::new(layout, GAlloc::default());
+    }
+
+    #[test]
+    fn alloc_dealloc() {
+        let layout = Layout::new::<[u8; 16]>();
+        let usba = Usba::new(layout, GAlloc::default());
+
+        unsafe {
+            let ptr = usba.alloc(layout);
+            assert_eq!(false, ptr.is_null());
+            usba.dealloc(ptr, layout);
+        }
     }
 }
