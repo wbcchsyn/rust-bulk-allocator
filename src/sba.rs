@@ -497,6 +497,27 @@ where
     }
 }
 
+unsafe impl<B> GlobalAlloc for Sba<B>
+where
+    B: GlobalAlloc,
+{
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if layout == self.layout() {
+            self.inner.alloc(layout)
+        } else {
+            self.backend().alloc(layout)
+        }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if layout == self.layout() {
+            self.inner.dealloc(ptr, layout);
+        } else {
+            self.backend().dealloc(ptr, layout);
+        }
+    }
+}
+
 impl<B> Sba<B>
 where
     B: GlobalAlloc,
@@ -534,5 +555,17 @@ mod sba_tests {
     fn new() {
         let layout = Layout::new::<usize>();
         let _sba = Sba::new(layout, GAlloc::default());
+    }
+
+    #[test]
+    fn alloc_dealloc() {
+        let layout = Layout::new::<[u8; 16]>();
+        let sba = Sba::new(layout, GAlloc::default());
+
+        unsafe {
+            let ptr = sba.alloc(layout);
+            assert_eq!(false, ptr.is_null());
+            sba.dealloc(ptr, layout);
+        }
     }
 }
