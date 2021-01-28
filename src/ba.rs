@@ -505,3 +505,21 @@ where
 {
     inner: Uba<B>,
 }
+
+impl<B> Ba<B>
+where
+    B: GlobalAlloc,
+{
+    /// The max size of the `Layout` that method `alloc` uses the cache.
+    /// Method `alloc` delegates the request to the backend if the size of specified `Layout` is
+    /// greater than this value.
+    pub const MAX_LAYOUT_SIZE: usize = Cache::MAX_CACHE_SIZE;
+
+    /// The max layout of the `Layout` that method `alloc` uses the cache.
+    /// Method `dealloc` delegates the request to the backend if the size of specified `Layout` is
+    /// greater than this value.
+    ///
+    /// (Actually, the align of `Layout` usually equals to or less than this number except for that
+    /// the programer dares to set some greater value for some reason.)
+    pub const MAX_LAYOUT_ALIGN: usize = Cache::align();
+}
