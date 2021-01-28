@@ -548,6 +548,27 @@ where
     }
 }
 
+unsafe impl<B> GlobalAlloc for Ba<B>
+where
+    B: GlobalAlloc,
+{
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if Self::MAX_LAYOUT_SIZE < layout.size() || Self::MAX_LAYOUT_ALIGN < layout.align() {
+            self.backend().alloc(layout)
+        } else {
+            self.inner.alloc(layout)
+        }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if Self::MAX_LAYOUT_SIZE < layout.size() || Self::MAX_LAYOUT_ALIGN < layout.align() {
+            self.backend().dealloc(ptr, layout)
+        } else {
+            self.inner.dealloc(ptr, layout)
+        }
+    }
+}
+
 impl<B> Ba<B>
 where
     B: GlobalAlloc,
@@ -566,5 +587,15 @@ mod ba_tests {
     #[test]
     fn new() {
         let _ba = Ba::new(GAlloc::default());
+    }
+
+    #[test]
+    fn alloc_dealloc() {
+        let layout = Layout::new::<u8>();
+        let ba = Ba::new(GAlloc::default());
+        unsafe {
+            let ptr = ba.alloc(layout);
+            ba.dealloc(ptr, layout);
+        }
     }
 }
