@@ -463,3 +463,139 @@ mod uba_tests {
         }
     }
 }
+
+/// 'Ba' stands for 'Bulk Allocator'.
+/// This implements `GlobalAlloc` . It allocates and caches bulk memory from the backend, and
+/// deallocates them on the drop at once.
+///
+/// The `Layout` to be cached is limited. `size` must be less than or equal to [`MAX_LAYOUT_SIZE`]
+/// and `align` must be less than or equal to [`MAX_LAYOUT_ALIGN`] .
+/// Method `alloc` and `dealloc` just delegate the requests to the backend if specified `Layout`
+/// does not satisfied the condition.
+///
+/// `alloc` tries to find a cached pointer and returns it if specified `Layout` is cacheable.
+/// If appropriate cache is not found, tries to find a larger cache and splits it to return. (The
+/// rest parts of the large cache will be cached again.)
+/// If neither the appropriate nor larger cache is not found, it allocates a memory chunk from
+/// backend, and makes a cache at first. (The size of memory chunk is same to [`MEMORY_CHUNK_SIZE`]
+/// .)
+///
+/// Method `dealloc` caches the passed pointer if specified `Layout` is cacheable.
+/// i.e. the memory will not be freed then. It is when the instance is dropped to deallocate the
+/// memories.
+///
+/// Instance drop releases all the memory chunks using the backend allocator. Pointers allocated
+/// via this instance will be invalid after the instance drop if the `Layout` is cacheable.
+/// Accessing such a pointer may lead memory unsafety even if the pointer itself is not
+/// deallocated.
+///
+/// # Warnings
+///
+/// Pointers via this instance will be invalid after the instance drop if the `Layout` is
+/// cacheable.
+/// Accessing such a pointer may lead memory unsafety even if the pointer itself is not
+/// deallocated.
+///
+/// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
+/// [`MAX_LAYOUT_ALIGN`]: #associatedconstant.MAX_LAYOUT_ALIGN
+/// [`MAX_LAYOUT_SIZE`]: #associatedconstant.MAX_LAYOUT_SIZE
+pub struct Ba<B>
+where
+    B: GlobalAlloc,
+{
+    inner: Uba<B>,
+}
+
+impl<B> Ba<B>
+where
+    B: GlobalAlloc,
+{
+    /// The max size of the `Layout` that method `alloc` uses the cache.
+    /// Method `alloc` delegates the request to the backend if the size of specified `Layout` is
+    /// greater than this value.
+    pub const MAX_LAYOUT_SIZE: usize = Cache::MAX_CACHE_SIZE;
+
+    /// The max layout of the `Layout` that method `alloc` uses the cache.
+    /// Method `dealloc` delegates the request to the backend if the size of specified `Layout` is
+    /// greater than this value.
+    ///
+    /// (Actually, the align of `Layout` usually equals to or less than this number except for that
+    /// the programer dares to set some greater value for some reason.)
+    pub const MAX_LAYOUT_ALIGN: usize = Cache::align();
+}
+
+impl<B> Ba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Creates a new instance with empty cache.
+    ///
+    /// `backend` is an allocator to allocate memory chunks to make cache. It is also used to
+    /// deallocate the memory chunks on the drop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bulk_allocator::Ba;
+    /// use std::alloc::System;
+    ///
+    /// let _ba = Ba::new(System);
+    /// ```
+    pub fn new(backend: B) -> Self {
+        Self {
+            inner: Uba::new(backend),
+        }
+    }
+}
+
+unsafe impl<B> GlobalAlloc for Ba<B>
+where
+    B: GlobalAlloc,
+{
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if Self::MAX_LAYOUT_SIZE < layout.size() || Self::MAX_LAYOUT_ALIGN < layout.align() {
+            self.backend().alloc(layout)
+        } else {
+            self.inner.alloc(layout)
+        }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if Self::MAX_LAYOUT_SIZE < layout.size() || Self::MAX_LAYOUT_ALIGN < layout.align() {
+            self.backend().dealloc(ptr, layout)
+        } else {
+            self.inner.dealloc(ptr, layout)
+        }
+    }
+}
+
+impl<B> Ba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Provides a reference to the backend allocator.
+    pub fn backend(&self) -> &B {
+        self.inner.backend()
+    }
+}
+
+#[cfg(test)]
+mod ba_tests {
+    use super::*;
+    use gharial::GAlloc;
+
+    #[test]
+    fn new() {
+        let _ba = Ba::new(GAlloc::default());
+    }
+
+    #[test]
+    fn alloc_dealloc() {
+        let layout = Layout::new::<u8>();
+        let ba = Ba::new(GAlloc::default());
+        unsafe {
+            let ptr = ba.alloc(layout);
+            ba.dealloc(ptr, layout);
+        }
+    }
+}
