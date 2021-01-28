@@ -66,6 +66,7 @@ mod ba;
 mod ptr_list;
 mod sba;
 
+pub use ba::Uba;
 use ptr_list::PtrList;
 pub use sba::{Sba, Usba};
 
