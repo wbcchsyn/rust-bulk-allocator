@@ -548,6 +548,16 @@ where
     }
 }
 
+impl<B> Ba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Provides a reference to the backend allocator.
+    pub fn backend(&self) -> &B {
+        self.inner.backend()
+    }
+}
+
 #[cfg(test)]
 mod ba_tests {
     use super::*;
