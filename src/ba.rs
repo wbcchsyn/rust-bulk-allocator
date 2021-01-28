@@ -348,3 +348,12 @@ where
     cache: UnsafeCell<Cache>,
     backend_: B,
 }
+
+impl<B> Uba<B>
+where
+    B: GlobalAlloc,
+{
+    /// The max size of the `Layout` that method `alloc` accepts.
+    /// If specified `Layout` has greater size, `alloc` causes an assertion error.
+    pub const MAX_LAYOUT_SIZE: usize = Cache::MAX_CACHE_SIZE;
+}
