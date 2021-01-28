@@ -365,6 +365,16 @@ where
     pub const MAX_LAYOUT_ALIGN: usize = Cache::align();
 }
 
+impl<B> Drop for Uba<B>
+where
+    B: GlobalAlloc,
+{
+    fn drop(&mut self) {
+        let cache = unsafe { &mut *self.cache.get() };
+        cache.destroy(self.backend());
+    }
+}
+
 impl<B> Uba<B>
 where
     B: GlobalAlloc,
