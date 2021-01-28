@@ -277,6 +277,9 @@ mod cache_tests {
 /// allocated via the instance will be invalid after the instance drop. Accessing such a pointer
 /// may lead memory unsafety even if the pointer itself is not deallocated.
 ///
+/// This struct is similar to [`Sba`] except for the behavior when `alloc` and `dealloc` was
+/// passed different argument `Layout` from that is passed to the constructor. See also [`Sba`] .
+///
 /// # Warnings
 ///
 /// The allocated pointers via `Usba` will be invalid after the instance is dropped. Accessing such
@@ -288,6 +291,7 @@ mod cache_tests {
 /// the constructor.
 ///
 /// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
+/// [`Sba`]: struct.Sba.html
 pub struct Usba<B>
 where
     B: GlobalAlloc,
@@ -416,6 +420,161 @@ mod usba_tests {
             let ptr = usba.alloc(layout);
             assert_eq!(false, ptr.is_null());
             usba.dealloc(ptr, layout);
+        }
+    }
+}
+
+/// 'Sba' stands for 'Single-layout-cache Bulk Allocator'.
+/// This implements `GlobalAlloc` . It allocates and caches bulk memory from the backend, and
+/// deallocates them on the drop at once.
+///
+/// Constructor takes a `Layout` as the argument, and builds instance with cache for memories which
+/// fits the `Layout` .
+///
+/// Method `alloc` delegates the request to the backend allocator if specified `Layout` is
+/// different from that is passed to the constructor.
+/// Otherwise, `alloc` searches the cache for an available pointer and returns it. If the cache is
+/// empty, `alloc` allocates a memory chunk from the backend allocator, splits the chunk into
+/// pieces to fit the `Layout` , and makes cache at first.
+///
+/// The size of the bulk memory is usualy same to [`MEMORY_CHUNK_SIZE`] , however, if the `Layout`
+/// is too large, the size exceeds [`MEMORY_CHUNK_SIZE`] .
+///
+/// Method `dealloc` delegates the request to the backend allocator if specified `Layout` is
+/// different from that is passed to the constructor; otherwise `dealloc` caches the pointer. i.e.
+/// the memory will not be freed then. It is when the instance is dropped to deallocate the
+/// memories.
+///
+/// Instance drop releases all the memory chunks using the backend allocator. Pointers allocated
+/// via the instance will be invalid after the instance drop if the argument `Layout` is same
+/// between the constructor and method `alloc` . Accessing such a pointer may lead memory unsafety
+/// even if the pointer itself is not deallocated.
+///
+/// This struct is similar to [`Usba`] except for the behavior when `alloc` and `dealloc` was
+/// passed different argument `Layout` from that is passed to the constructor. See also [`Usba`] .
+///
+/// # Warnings
+///
+/// Pointers allocated vir the instance will be invalid after the instance drop if the argument
+/// `Layout` is same between the constructor and method `alloc` . Accessing such a pointer may lead
+/// memory unsafety even if the pointer itself is not deallocated.
+///
+///
+/// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
+/// [`Usba`]: struct.Usba.html
+pub struct Sba<B>
+where
+    B: GlobalAlloc,
+{
+    inner: Usba<B>,
+}
+
+impl<B> From<Layout> for Sba<B>
+where
+    B: Default + GlobalAlloc,
+{
+    fn from(layout: Layout) -> Self {
+        Self::new(layout, B::default())
+    }
+}
+
+impl<B> Sba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Creates a new instance with empty cache.
+    ///
+    /// The cache is built for memories to fit `layout` and method `alloc` uses the cache only when
+    /// the same `layout` is passed; otherwise `alloc` just delegates the request to the backend.
+    ///
+    /// `backend` is an allocator to allocate memory chunks to make cache. It is also used to
+    /// deallocate the memory chunks on the drop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bulk_allocator::Sba;
+    /// use std::alloc::{Layout, System};
+    ///
+    /// let layout = Layout::new::<usize>();
+    /// let _sba = Sba::new(layout, System);
+    /// ```
+    pub fn new(layout: Layout, backend: B) -> Self {
+        Self {
+            inner: Usba::new(layout, backend),
+        }
+    }
+}
+
+unsafe impl<B> GlobalAlloc for Sba<B>
+where
+    B: GlobalAlloc,
+{
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if layout == self.layout() {
+            self.inner.alloc(layout)
+        } else {
+            self.backend().alloc(layout)
+        }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if layout == self.layout() {
+            self.inner.dealloc(ptr, layout);
+        } else {
+            self.backend().dealloc(ptr, layout);
+        }
+    }
+}
+
+impl<B> Sba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Returns same `Layout` that is passed to the constructor.
+    /// The cache is build for this `Layout` and method `alloc` can take only this value as the
+    /// argument; otherwise `alloc` causes an assertion error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bulk_allocator::Sba;
+    /// use std::alloc::{Layout, System};
+    ///
+    /// let layout = Layout::new::<usize>();
+    /// let sba = Sba::new(layout, System);
+    /// assert_eq!(layout, sba.layout());
+    /// ```
+    pub fn layout(&self) -> Layout {
+        self.inner.layout()
+    }
+
+    /// Provides a reference to the backend allocator.
+    pub fn backend(&self) -> &B {
+        &self.inner.backend()
+    }
+}
+
+#[cfg(test)]
+mod sba_tests {
+    use super::*;
+    use gharial::GAlloc;
+
+    #[test]
+    fn new() {
+        let layout = Layout::new::<usize>();
+        let _sba = Sba::new(layout, GAlloc::default());
+    }
+
+    #[test]
+    fn alloc_dealloc() {
+        let layout = Layout::new::<[u8; 16]>();
+        let sba = Sba::new(layout, GAlloc::default());
+
+        unsafe {
+            let ptr = sba.alloc(layout);
+            assert_eq!(false, ptr.is_null());
+            sba.dealloc(ptr, layout);
         }
     }
 }

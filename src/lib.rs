@@ -62,11 +62,13 @@
 //! The instance uses cache only when the argument `layout` is same to what the constructor is passed; otherwise,
 //! the requests are delegated to the backend.
 
+mod ba;
 mod ptr_list;
 mod sba;
 
+pub use ba::Uba;
 use ptr_list::PtrList;
-pub use sba::Usba;
+pub use sba::{Sba, Usba};
 
 /// The default byte count of bulk memory that this crate allocates from the backend if no cache
 /// is.
