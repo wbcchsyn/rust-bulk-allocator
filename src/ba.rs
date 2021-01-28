@@ -74,6 +74,44 @@ impl Cache {
         }
     }
 
+    pub unsafe fn alloc<B>(&mut self, layout: Layout, backend: &B) -> *mut u8
+    where
+        B: GlobalAlloc,
+    {
+        let layout = Self::fit_layout(layout).unwrap();
+
+        // If some pointer is cached, just return it.
+        if let Some(ptr) = self.pop_cache(layout) {
+            return ptr;
+        }
+
+        // Allocate a memory chunk from the backend.
+        let block = {
+            let layout = Self::backend_layout();
+            let ptr = backend.alloc(layout);
+            // Return null pointer if failed.
+            if ptr.is_null() {
+                return ptr;
+            }
+
+            core::slice::from_raw_parts_mut(ptr, layout.size())
+        };
+
+        // Add block to the self.to_free list.
+        let block = {
+            let layout = Self::to_free_layout();
+            let (f, s) = block.split_at_mut(layout.size());
+
+            let ptr = NonNull::new_unchecked(f.as_mut_ptr());
+            self.to_free.push(ptr);
+
+            s
+        };
+
+        self.fill_cache(block, 0);
+        self.pop_cache(layout).unwrap()
+    }
+
     /// Pools `ptr` to the cache.
     ///
     /// Causes an assertion error if `layout` is not in the range to be cached.
@@ -119,6 +157,53 @@ impl Cache {
         (layout.size().leading_zeros() - Self::MAX_CACHE_SIZE.leading_zeros()) as usize
     }
 
+    fn fill_cache(&mut self, memory_block: &mut [u8], index_hint: usize) {
+        let mut block = memory_block;
+
+        for i in index_hint..Self::POOLS_LEN {
+            let pool_size = Self::MAX_CACHE_SIZE >> i;
+
+            while pool_size <= block.len() {
+                unsafe {
+                    let (f, s) = block.split_at_mut(pool_size);
+                    self.pools[i].push(NonNull::new_unchecked(f.as_mut_ptr()));
+                    block = s;
+                }
+            }
+            if block.is_empty() {
+                break;
+            }
+        }
+    }
+
+    fn pop_cache(&mut self, layout: Layout) -> Option<*mut u8> {
+        let index = Self::pools_index(layout);
+
+        // If a pointer to fit layout is cached, just return it.
+        if let Some(ptr) = self.pools[index].pop() {
+            return Some(ptr);
+        }
+
+        // Try to find a cache greater than layout.
+        // If found, return it. The rest of the memory block will be cached again.
+        for i in (0..index).rev() {
+            match self.pools[i].pop() {
+                None => continue,
+
+                Some(ptr) => {
+                    let size = Self::MAX_CACHE_SIZE >> i;
+                    let block = unsafe { core::slice::from_raw_parts_mut(ptr, size) };
+                    let (_, s) = block.split_at_mut(layout.size());
+
+                    self.fill_cache(s, i + 1);
+                    return Some(ptr);
+                }
+            }
+        }
+
+        None
+    }
+
     const fn align() -> usize {
         // Same to usize::max(align_of::<PtrList>(), align_of::<u128>()).
         // (usize::max is not a const function.)
@@ -127,6 +212,12 @@ impl Cache {
         } else {
             align_of::<PtrList>()
         }
+    }
+
+    fn to_free_layout() -> Layout {
+        let layout =
+            unsafe { Layout::from_size_align_unchecked(size_of::<PtrList>(), Self::align()) };
+        layout.pad_to_align()
     }
 
     const fn backend_layout() -> Layout {
@@ -140,11 +231,75 @@ impl Cache {
 mod cache_tests {
     use super::*;
     use gharial::GAlloc;
+    use std::collections::HashSet;
 
     #[test]
     fn new() {
         let backend = GAlloc::default();
         let mut cache = Cache::new();
         cache.destroy(&backend);
+    }
+
+    #[test]
+    fn alloc_dealloc() {
+        let check = |layout| {
+            let backend = GAlloc::default();
+            let mut cache = Cache::new();
+            let mut pointers = HashSet::with_capacity(MEMORY_CHUNK_SIZE);
+
+            for _ in 0..MEMORY_CHUNK_SIZE {
+                let ptr = unsafe { cache.alloc(layout, &backend) };
+                assert_eq!(true, pointers.insert(ptr));
+            }
+
+            for &ptr in pointers.iter() {
+                unsafe { cache.dealloc(ptr, layout) };
+            }
+
+            cache.destroy(&backend);
+        };
+
+        let mut size = 1;
+        while size <= Cache::MAX_CACHE_SIZE {
+            let mut align = 1;
+            while align <= Cache::align() {
+                let layout = Layout::from_size_align(size, align).unwrap();
+                check(layout);
+                align *= 2;
+            }
+
+            size *= 2;
+        }
+    }
+
+    #[test]
+    fn alloc_effectivity() {
+        let check = |layout| {
+            let backend = GAlloc::default();
+            let mut cache = Cache::new();
+
+            for _ in 0..MEMORY_CHUNK_SIZE {
+                unsafe {
+                    let ptr = cache.alloc(layout, &backend);
+                    cache.dealloc(ptr, layout);
+
+                    assert_eq!(1, cache.to_free.len());
+                }
+            }
+
+            cache.destroy(&backend);
+        };
+
+        let mut size = 1;
+        while size <= Cache::MAX_CACHE_SIZE {
+            let mut align = 1;
+            while align <= Cache::align() {
+                let layout = Layout::from_size_align(size, align).unwrap();
+                check(layout);
+                align *= 2;
+            }
+
+            size *= 2;
+        }
     }
 }
