@@ -356,4 +356,11 @@ where
     /// The max size of the `Layout` that method `alloc` accepts.
     /// If specified `Layout` has greater size, `alloc` causes an assertion error.
     pub const MAX_LAYOUT_SIZE: usize = Cache::MAX_CACHE_SIZE;
+
+    /// The max layout of the `Layout` that method `alloc` accepts.
+    /// If specified `Layout` has greater align, `alloc` causes an assertion error.
+    ///
+    /// (Actually, the align of `Layout` usually equals to or less than this value except for that
+    /// the programer dares to set some greater value for some reason.)
+    pub const MAX_LAYOUT_ALIGN: usize = Cache::align();
 }
