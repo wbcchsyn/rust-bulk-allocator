@@ -375,6 +375,15 @@ where
     }
 }
 
+impl<B> Default for Uba<B>
+where
+    B: Default + GlobalAlloc,
+{
+    fn default() -> Self {
+        Self::new(B::default())
+    }
+}
+
 impl<B> Uba<B>
 where
     B: GlobalAlloc,
