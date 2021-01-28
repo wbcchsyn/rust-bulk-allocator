@@ -523,3 +523,38 @@ where
     /// the programer dares to set some greater value for some reason.)
     pub const MAX_LAYOUT_ALIGN: usize = Cache::align();
 }
+
+impl<B> Ba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Creates a new instance with empty cache.
+    ///
+    /// `backend` is an allocator to allocate memory chunks to make cache. It is also used to
+    /// deallocate the memory chunks on the drop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bulk_allocator::Ba;
+    /// use std::alloc::System;
+    ///
+    /// let _ba = Ba::new(System);
+    /// ```
+    pub fn new(backend: B) -> Self {
+        Self {
+            inner: Uba::new(backend),
+        }
+    }
+}
+
+#[cfg(test)]
+mod ba_tests {
+    use super::*;
+    use gharial::GAlloc;
+
+    #[test]
+    fn new() {
+        let _ba = Ba::new(GAlloc::default());
+    }
+}
