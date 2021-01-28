@@ -364,3 +364,13 @@ where
     /// the programer dares to set some greater value for some reason.)
     pub const MAX_LAYOUT_ALIGN: usize = Cache::align();
 }
+
+impl<B> Uba<B>
+where
+    B: GlobalAlloc,
+{
+    /// Provides a reference to the backend allocator.
+    pub fn backend(&self) -> &B {
+        &self.backend_
+    }
+}
