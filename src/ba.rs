@@ -31,6 +31,7 @@
 
 use crate::{PtrList, MEMORY_CHUNK_SIZE};
 use core::alloc::{GlobalAlloc, Layout};
+use core::cell::UnsafeCell;
 use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 
@@ -302,4 +303,48 @@ mod cache_tests {
             size *= 2;
         }
     }
+}
+
+/// 'Uba' stands for 'Unsafe Bulk Allocator'.
+/// This implements `GlobalAlloc` . It allocates and caches bulk memory from the backend, and
+/// deallocates them on the drop at once.
+///
+/// The `Layout` to be cached is limited. `size` must be less than or equal to [`MAX_LAYOUT_SIZE`]
+/// and `align` must be less than or equal to [`MAX_LAYOUT_ALIGN`] .
+/// Method `alloc` causes an assertion error if argument `Layout` does not satisfy the conditions.
+///
+/// `alloc` tries to find a cached pointer and returns it if specified `Layout` is cacheable.
+/// If appropriate cache is not found, tries to find a larger cache and splits it to return. (The
+/// rest parts of the large cache will be cached again.)
+/// If neither the appropriate nor larger cache is not found, it allocates a memory chunk from
+/// backend, and makes a cache at first. (The size of memory chunk is same to [`MEMORY_CHUNK_SIZE`]
+/// .)
+///
+/// Method `dealloc` always caches the passed pointer. i.e. the memory will not be freed then. It
+/// is when the instance is dropped to deallocate the memories.
+///
+/// Instance drop releases all the memory chunks using the backend allocator. All the pointers
+/// allocated via the instance will be invalid after the instance drop. Accessing such a pointer
+/// may lead memory unsafety even if the pointer itself is not deallocated.
+///
+/// # Warnings
+///
+/// The allocated pointers via `Usba` will be invalid after the instance is dropped. Accessing such
+/// a pointer may lead memory unsafety evenn if the pointer itself is not deallocated.
+///
+/// # Errors
+///
+/// `alloc` causes an assertion error if either `size` or `align` of the specified `Layout` is
+/// greater than those of [`MAX_LAYOUT`] .
+/// the constructor.
+///
+/// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
+/// [`MAX_LAYOUT_ALIGN`]: #associatedconstant.MAX_LAYOUT_ALIGN
+/// [`MAX_LAYOUT_SIZE`]: #associatedconstant.MAX_LAYOUT_SIZE
+pub struct Uba<B>
+where
+    B: GlobalAlloc,
+{
+    cache: UnsafeCell<Cache>,
+    backend_: B,
 }
