@@ -349,6 +349,8 @@ where
     backend_: B,
 }
 
+unsafe impl<B> Send for Uba<B> where B: Send + GlobalAlloc {}
+
 impl<B> Uba<B>
 where
     B: GlobalAlloc,
