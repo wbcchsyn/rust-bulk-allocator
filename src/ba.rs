@@ -463,3 +463,45 @@ mod uba_tests {
         }
     }
 }
+
+/// 'Ba' stands for 'Bulk Allocator'.
+/// This implements `GlobalAlloc` . It allocates and caches bulk memory from the backend, and
+/// deallocates them on the drop at once.
+///
+/// The `Layout` to be cached is limited. `size` must be less than or equal to [`MAX_LAYOUT_SIZE`]
+/// and `align` must be less than or equal to [`MAX_LAYOUT_ALIGN`] .
+/// Method `alloc` and `dealloc` just delegate the requests to the backend if specified `Layout`
+/// does not satisfied the condition.
+///
+/// `alloc` tries to find a cached pointer and returns it if specified `Layout` is cacheable.
+/// If appropriate cache is not found, tries to find a larger cache and splits it to return. (The
+/// rest parts of the large cache will be cached again.)
+/// If neither the appropriate nor larger cache is not found, it allocates a memory chunk from
+/// backend, and makes a cache at first. (The size of memory chunk is same to [`MEMORY_CHUNK_SIZE`]
+/// .)
+///
+/// Method `dealloc` caches the passed pointer if specified `Layout` is cacheable.
+/// i.e. the memory will not be freed then. It is when the instance is dropped to deallocate the
+/// memories.
+///
+/// Instance drop releases all the memory chunks using the backend allocator. Pointers allocated
+/// via this instance will be invalid after the instance drop if the `Layout` is cacheable.
+/// Accessing such a pointer may lead memory unsafety even if the pointer itself is not
+/// deallocated.
+///
+/// # Warnings
+///
+/// Pointers via this instance will be invalid after the instance drop if the `Layout` is
+/// cacheable.
+/// Accessing such a pointer may lead memory unsafety even if the pointer itself is not
+/// deallocated.
+///
+/// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
+/// [`MAX_LAYOUT_ALIGN`]: #associatedconstant.MAX_LAYOUT_ALIGN
+/// [`MAX_LAYOUT_SIZE`]: #associatedconstant.MAX_LAYOUT_SIZE
+pub struct Ba<B>
+where
+    B: GlobalAlloc,
+{
+    inner: Uba<B>,
+}
