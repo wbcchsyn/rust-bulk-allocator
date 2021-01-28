@@ -379,8 +379,44 @@ impl<B> Uba<B>
 where
     B: GlobalAlloc,
 {
+    /// Creates a new instance with empty cache.
+    ///
+    /// `backend` is an allocator to allocate memory chunks to make cache. It is also used to
+    /// deallocate the memory chunks on the drop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bulk_allocator::Uba;
+    /// use std::alloc::System;
+    ///
+    /// let _uba = Uba::new(System);
+    /// ```
+    pub fn new(backend: B) -> Self {
+        Self {
+            cache: UnsafeCell::new(Cache::new()),
+            backend_: backend,
+        }
+    }
+}
+
+impl<B> Uba<B>
+where
+    B: GlobalAlloc,
+{
     /// Provides a reference to the backend allocator.
     pub fn backend(&self) -> &B {
         &self.backend_
+    }
+}
+
+#[cfg(test)]
+mod uba_tests {
+    use super::*;
+    use gharial::GAlloc;
+
+    #[test]
+    fn new() {
+        let _uba = Uba::new(GAlloc::default());
     }
 }
