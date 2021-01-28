@@ -400,6 +400,28 @@ where
     }
 }
 
+unsafe impl<B> GlobalAlloc for Uba<B>
+where
+    B: GlobalAlloc,
+{
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        assert!(layout.size() <= Self::MAX_LAYOUT_SIZE);
+        assert!(layout.align() <= Self::MAX_LAYOUT_ALIGN);
+
+        let cache = &mut *self.cache.get();
+        cache.alloc(layout, self.backend())
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        debug_assert_eq!(false, ptr.is_null());
+        debug_assert!(layout.size() <= Self::MAX_LAYOUT_SIZE);
+        debug_assert!(layout.align() <= Self::MAX_LAYOUT_ALIGN);
+
+        let cache = &mut *self.cache.get();
+        cache.dealloc(ptr, layout)
+    }
+}
+
 impl<B> Uba<B>
 where
     B: GlobalAlloc,
@@ -418,5 +440,15 @@ mod uba_tests {
     #[test]
     fn new() {
         let _uba = Uba::new(GAlloc::default());
+    }
+
+    #[test]
+    fn alloc_dealloc() {
+        let layout = Layout::new::<u8>();
+        let uba = Uba::new(GAlloc::default());
+        unsafe {
+            let ptr = uba.alloc(layout);
+            uba.dealloc(ptr, layout);
+        }
     }
 }
