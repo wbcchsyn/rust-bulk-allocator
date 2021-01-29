@@ -35,7 +35,7 @@ use core::cell::UnsafeCell;
 use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 
-/// Structure for `Sba` and `UnLayoutBulkA` .
+/// Structure for `LayoutBulkA` and `UnLayoutBulkA` .
 struct Cache {
     to_free: PtrList,
     pool: PtrList,
@@ -277,8 +277,9 @@ mod cache_tests {
 /// allocated via the instance will be invalid after the instance drop. Accessing such a pointer
 /// may lead memory unsafety even if the pointer itself is not deallocated.
 ///
-/// This struct is similar to [`Sba`] except for the behavior when `alloc` and `dealloc` was
-/// passed different argument `Layout` from that is passed to the constructor. See also [`Sba`] .
+/// This struct is similar to [`LayoutBulkA`] except for the behavior when `alloc` and `dealloc`
+/// was passed different argument `Layout` from that is passed to the constructor. See also
+/// [`LayoutBulkA`] .
 ///
 /// # Warnings
 ///
@@ -291,7 +292,7 @@ mod cache_tests {
 /// the constructor.
 ///
 /// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
-/// [`Sba`]: struct.Sba.html
+/// [`LayoutBulkA`]: struct.LayoutBulkA.html
 pub struct UnLayoutBulkA<B>
 where
     B: GlobalAlloc,
@@ -424,7 +425,7 @@ mod alloc_tests {
     }
 }
 
-/// 'Sba' stands for 'Single-layout-cache Bulk Allocator'.
+/// 'LayoutBulkA' stands for 'single-Layout-cache Bulk Allocator'.
 /// This implements `GlobalAlloc` . It allocates and caches bulk memory from the backend, and
 /// deallocates them on the drop at once.
 ///
@@ -463,14 +464,14 @@ mod alloc_tests {
 ///
 /// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
 /// [`UnLayoutBulkA`]: struct.UnLayoutBulkA.html
-pub struct Sba<B>
+pub struct LayoutBulkA<B>
 where
     B: GlobalAlloc,
 {
     inner: UnLayoutBulkA<B>,
 }
 
-impl<B> From<Layout> for Sba<B>
+impl<B> From<Layout> for LayoutBulkA<B>
 where
     B: Default + GlobalAlloc,
 {
@@ -479,7 +480,7 @@ where
     }
 }
 
-impl<B> Sba<B>
+impl<B> LayoutBulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -494,11 +495,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use bulk_allocator::Sba;
+    /// use bulk_allocator::LayoutBulkA;
     /// use std::alloc::{Layout, System};
     ///
     /// let layout = Layout::new::<usize>();
-    /// let _sba = Sba::new(layout, System);
+    /// let _alloc = LayoutBulkA::new(layout, System);
     /// ```
     pub fn new(layout: Layout, backend: B) -> Self {
         Self {
@@ -507,7 +508,7 @@ where
     }
 }
 
-unsafe impl<B> GlobalAlloc for Sba<B>
+unsafe impl<B> GlobalAlloc for LayoutBulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -528,7 +529,7 @@ where
     }
 }
 
-impl<B> Sba<B>
+impl<B> LayoutBulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -539,12 +540,12 @@ where
     /// # Examples
     ///
     /// ```
-    /// use bulk_allocator::Sba;
+    /// use bulk_allocator::LayoutBulkA;
     /// use std::alloc::{Layout, System};
     ///
     /// let layout = Layout::new::<usize>();
-    /// let sba = Sba::new(layout, System);
-    /// assert_eq!(layout, sba.layout());
+    /// let alloc = LayoutBulkA::new(layout, System);
+    /// assert_eq!(layout, alloc.layout());
     /// ```
     pub fn layout(&self) -> Layout {
         self.inner.layout()
@@ -557,25 +558,25 @@ where
 }
 
 #[cfg(test)]
-mod sba_tests {
+mod layout_bulk_a_tests {
     use super::*;
     use gharial::GAlloc;
 
     #[test]
     fn new() {
         let layout = Layout::new::<usize>();
-        let _sba = Sba::new(layout, GAlloc::default());
+        let _alloc = LayoutBulkA::new(layout, GAlloc::default());
     }
 
     #[test]
     fn alloc_dealloc() {
         let layout = Layout::new::<[u8; 16]>();
-        let sba = Sba::new(layout, GAlloc::default());
+        let alloc = LayoutBulkA::new(layout, GAlloc::default());
 
         unsafe {
-            let ptr = sba.alloc(layout);
+            let ptr = alloc.alloc(layout);
             assert_eq!(false, ptr.is_null());
-            sba.dealloc(ptr, layout);
+            alloc.dealloc(ptr, layout);
         }
     }
 }
