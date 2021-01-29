@@ -63,12 +63,12 @@
 //! the requests are delegated to the backend.
 
 mod bulk_a;
+mod layout_bulk_a;
 mod ptr_list;
-mod sba;
 
 pub use bulk_a::{BulkA, UnBulkA};
+pub use layout_bulk_a::{Sba, Usba};
 use ptr_list::PtrList;
-pub use sba::{Sba, Usba};
 
 /// The default byte count of bulk memory that this crate allocates from the backend if no cache
 /// is.
