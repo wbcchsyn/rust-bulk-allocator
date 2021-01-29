@@ -62,11 +62,11 @@
 //! The instance uses cache only when the argument `layout` is same to what the constructor is passed; otherwise,
 //! the requests are delegated to the backend.
 
-mod ba;
+mod bulk_a;
 mod ptr_list;
 mod sba;
 
-pub use ba::{Ba, Uba};
+pub use bulk_a::{Ba, Uba};
 use ptr_list::PtrList;
 pub use sba::{Sba, Usba};
 
