@@ -35,7 +35,7 @@ use core::cell::UnsafeCell;
 use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 
-/// Inner type of 'Ba' and 'UnBulkA'.
+/// Inner type of 'BulkA' and 'UnBulkA'.
 pub struct Cache {
     to_free: PtrList,
     pools: [PtrList; Self::POOLS_LEN],
@@ -464,7 +464,7 @@ mod un_bulk_a_tests {
     }
 }
 
-/// 'Ba' stands for 'Bulk Allocator'.
+/// 'BulkA' stands for 'Bulk Allocator'.
 /// This implements `GlobalAlloc` . It allocates and caches bulk memory from the backend, and
 /// deallocates them on the drop at once.
 ///
@@ -499,14 +499,14 @@ mod un_bulk_a_tests {
 /// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
 /// [`MAX_LAYOUT_ALIGN`]: #associatedconstant.MAX_LAYOUT_ALIGN
 /// [`MAX_LAYOUT_SIZE`]: #associatedconstant.MAX_LAYOUT_SIZE
-pub struct Ba<B>
+pub struct BulkA<B>
 where
     B: GlobalAlloc,
 {
     inner: UnBulkA<B>,
 }
 
-impl<B> Ba<B>
+impl<B> BulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -524,7 +524,7 @@ where
     pub const MAX_LAYOUT_ALIGN: usize = Cache::align();
 }
 
-impl<B> Ba<B>
+impl<B> BulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -536,10 +536,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use bulk_allocator::Ba;
+    /// use bulk_allocator::BulkA;
     /// use std::alloc::System;
     ///
-    /// let _ba = Ba::new(System);
+    /// let _alloc = BulkA::new(System);
     /// ```
     pub fn new(backend: B) -> Self {
         Self {
@@ -548,7 +548,7 @@ where
     }
 }
 
-unsafe impl<B> GlobalAlloc for Ba<B>
+unsafe impl<B> GlobalAlloc for BulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -569,7 +569,7 @@ where
     }
 }
 
-impl<B> Ba<B>
+impl<B> BulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -580,22 +580,22 @@ where
 }
 
 #[cfg(test)]
-mod ba_tests {
+mod bulk_a_tests {
     use super::*;
     use gharial::GAlloc;
 
     #[test]
     fn new() {
-        let _ba = Ba::new(GAlloc::default());
+        let _alloc = BulkA::new(GAlloc::default());
     }
 
     #[test]
     fn alloc_dealloc() {
         let layout = Layout::new::<u8>();
-        let ba = Ba::new(GAlloc::default());
+        let alloc = BulkA::new(GAlloc::default());
         unsafe {
-            let ptr = ba.alloc(layout);
-            ba.dealloc(ptr, layout);
+            let ptr = alloc.alloc(layout);
+            alloc.dealloc(ptr, layout);
         }
     }
 }

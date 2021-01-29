@@ -66,7 +66,7 @@ mod bulk_a;
 mod ptr_list;
 mod sba;
 
-pub use bulk_a::{Ba, UnBulkA};
+pub use bulk_a::{BulkA, UnBulkA};
 use ptr_list::PtrList;
 pub use sba::{Sba, Usba};
 
