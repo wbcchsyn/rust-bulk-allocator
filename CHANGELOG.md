@@ -11,3 +11,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 ### Fixed
 - Update for feature 'allocator\_api' change.
 - Refactor.
+
+## 0.3.0 - 2021-01-29
+### Updated
+- Delete most codes and quit to enable nightly features.
+- Give up to implementing `AllocRef` , and implements `GlobalAlloc` instead.
