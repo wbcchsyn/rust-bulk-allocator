@@ -334,9 +334,8 @@ mod cache_tests {
 ///
 /// # Errors
 ///
-/// `alloc` causes an assertion error if either `size` or `align` of the specified `Layout` is
-/// greater than those of [`MAX_LAYOUT`] .
-/// the constructor.
+/// `alloc` causes an assertion error if the argument `Layout` is too large. (i.e. if `Layout.size`
+/// is greater than [`MAX_LAYOUT_SIZE`] or `Layout.align` is greater than [`MAX_LAYOUT_ALIGN`] .
 ///
 /// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
 /// [`MAX_LAYOUT_ALIGN`]: #associatedconstant.MAX_LAYOUT_ALIGN
