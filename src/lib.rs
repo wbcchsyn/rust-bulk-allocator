@@ -67,7 +67,7 @@ mod layout_bulk_a;
 mod ptr_list;
 
 pub use bulk_a::{BulkA, UnBulkA};
-pub use layout_bulk_a::{Sba, Usba};
+pub use layout_bulk_a::{Sba, UnLayoutBulkA};
 use ptr_list::PtrList;
 
 /// The default byte count of bulk memory that this crate allocates from the backend if no cache

@@ -35,7 +35,7 @@ use core::cell::UnsafeCell;
 use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 
-/// Structure for `Sba` and `Usba` .
+/// Structure for `Sba` and `UnLayoutBulkA` .
 struct Cache {
     to_free: PtrList,
     pool: PtrList,
@@ -254,7 +254,7 @@ mod cache_tests {
     }
 }
 
-/// 'Usba' stands for 'Unsafe Single-layout-cache Bulk Allocator'.
+/// 'UnLayoutBulkA' stands for 'Unsafe single-Layout-cache Bulk Allocator'.
 /// This implements `GlobalAlloc` . It allocates and caches bulk memory from the backend, and
 /// deallocates them on the drop at once.
 ///
@@ -282,7 +282,7 @@ mod cache_tests {
 ///
 /// # Warnings
 ///
-/// The allocated pointers via `Usba` will be invalid after the instance is dropped. Accessing such
+/// The allocated pointers via `UnLayoutBulkA` will be invalid after the instance is dropped. Accessing such
 /// a pointer may lead memory unsafety evenn if the pointer itself is not deallocated.
 ///
 /// # Errors
@@ -292,7 +292,7 @@ mod cache_tests {
 ///
 /// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
 /// [`Sba`]: struct.Sba.html
-pub struct Usba<B>
+pub struct UnLayoutBulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -301,9 +301,9 @@ where
     backend_: B,
 }
 
-unsafe impl<B> Send for Usba<B> where B: Send + GlobalAlloc {}
+unsafe impl<B> Send for UnLayoutBulkA<B> where B: Send + GlobalAlloc {}
 
-impl<B> Drop for Usba<B>
+impl<B> Drop for UnLayoutBulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -313,7 +313,7 @@ where
     }
 }
 
-impl<B> From<Layout> for Usba<B>
+impl<B> From<Layout> for UnLayoutBulkA<B>
 where
     B: Default + GlobalAlloc,
 {
@@ -322,7 +322,7 @@ where
     }
 }
 
-impl<B> Usba<B>
+impl<B> UnLayoutBulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -337,11 +337,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use bulk_allocator::Usba;
+    /// use bulk_allocator::UnLayoutBulkA;
     /// use std::alloc::{Layout, System};
     ///
     /// let layout = Layout::new::<usize>();
-    /// let _usba = Usba::new(layout, System);
+    /// let _alloc = UnLayoutBulkA::new(layout, System);
     /// ```
     pub fn new(layout: Layout, backend: B) -> Self {
         Self {
@@ -352,7 +352,7 @@ where
     }
 }
 
-unsafe impl<B> GlobalAlloc for Usba<B>
+unsafe impl<B> GlobalAlloc for UnLayoutBulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -372,7 +372,7 @@ where
     }
 }
 
-impl<B> Usba<B>
+impl<B> UnLayoutBulkA<B>
 where
     B: GlobalAlloc,
 {
@@ -383,12 +383,12 @@ where
     /// # Examples
     ///
     /// ```
-    /// use bulk_allocator::Usba;
+    /// use bulk_allocator::UnLayoutBulkA;
     /// use std::alloc::{Layout, System};
     ///
     /// let layout = Layout::new::<usize>();
-    /// let usba = Usba::new(layout, System);
-    /// assert_eq!(layout, usba.layout());
+    /// let alloc = UnLayoutBulkA::new(layout, System);
+    /// assert_eq!(layout, alloc.layout());
     /// ```
     pub fn layout(&self) -> Layout {
         self.layout_
@@ -401,25 +401,25 @@ where
 }
 
 #[cfg(test)]
-mod usba_tests {
+mod alloc_tests {
     use super::*;
     use gharial::GAlloc;
 
     #[test]
     fn new() {
         let layout = Layout::new::<u8>();
-        let _usba = Usba::new(layout, GAlloc::default());
+        let _alloc = UnLayoutBulkA::new(layout, GAlloc::default());
     }
 
     #[test]
     fn alloc_dealloc() {
         let layout = Layout::new::<[u8; 16]>();
-        let usba = Usba::new(layout, GAlloc::default());
+        let alloc = UnLayoutBulkA::new(layout, GAlloc::default());
 
         unsafe {
-            let ptr = usba.alloc(layout);
+            let ptr = alloc.alloc(layout);
             assert_eq!(false, ptr.is_null());
-            usba.dealloc(ptr, layout);
+            alloc.dealloc(ptr, layout);
         }
     }
 }
@@ -450,8 +450,9 @@ mod usba_tests {
 /// between the constructor and method `alloc` . Accessing such a pointer may lead memory unsafety
 /// even if the pointer itself is not deallocated.
 ///
-/// This struct is similar to [`Usba`] except for the behavior when `alloc` and `dealloc` was
-/// passed different argument `Layout` from that is passed to the constructor. See also [`Usba`] .
+/// This struct is similar to [`UnLayoutBulkA`] except for the behavior when `alloc` and `dealloc`
+/// was passed different argument `Layout` from that is passed to the constructor. See also
+/// [`UnLayoutBulkA`] .
 ///
 /// # Warnings
 ///
@@ -461,12 +462,12 @@ mod usba_tests {
 ///
 ///
 /// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
-/// [`Usba`]: struct.Usba.html
+/// [`UnLayoutBulkA`]: struct.UnLayoutBulkA.html
 pub struct Sba<B>
 where
     B: GlobalAlloc,
 {
-    inner: Usba<B>,
+    inner: UnLayoutBulkA<B>,
 }
 
 impl<B> From<Layout> for Sba<B>
@@ -501,7 +502,7 @@ where
     /// ```
     pub fn new(layout: Layout, backend: B) -> Self {
         Self {
-            inner: Usba::new(layout, backend),
+            inner: UnLayoutBulkA::new(layout, backend),
         }
     }
 }
