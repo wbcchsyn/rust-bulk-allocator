@@ -34,3 +34,14 @@ pub enum Color {
     Red,
     Black,
 }
+
+pub trait Bucket {
+    fn left(&self) -> *mut Self;
+    fn set_left(&mut self, left: *mut Self);
+
+    fn right(&self) -> *mut Self;
+    fn set_right(&mut self, right: *mut Self);
+
+    fn color(&self) -> Color;
+    fn set_color(&mut self, color: Color);
+}
