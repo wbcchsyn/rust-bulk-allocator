@@ -29,6 +29,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::ptr::null_mut;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
     Red,
@@ -48,4 +50,20 @@ pub trait Bucket {
 
 pub struct RBTree<B> {
     root: *mut B,
+}
+
+impl<B> RBTree<B> {
+    pub fn new() -> Self {
+        Self { root: null_mut() }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new() {
+        RBTree::<usize>::new();
+    }
 }
