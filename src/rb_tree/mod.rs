@@ -45,3 +45,7 @@ pub trait Bucket {
     fn color(&self) -> Color;
     fn set_color(&mut self, color: Color);
 }
+
+pub struct RBTree<B> {
+    root: *mut B,
+}
