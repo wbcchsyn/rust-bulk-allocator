@@ -29,6 +29,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cmp::Ordering;
 use std::ptr::null_mut;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +63,23 @@ impl<B> RBTree<B>
 where
     B: Ord + Bucket,
 {
+    pub fn find<K>(&self, key: &K) -> Option<&B>
+    where
+        B: PartialOrd<K>,
+    {
+        let mut it = self.root;
+
+        while let Some(b) = unsafe { it.as_mut() } {
+            match (b as &B).partial_cmp(key).unwrap() {
+                Ordering::Less => it = b.right(),
+                Ordering::Equal => return Some(b),
+                Ordering::Greater => it = b.left(),
+            }
+        }
+
+        None
+    }
+
     pub fn insert(&mut self, bucket: &mut B) {
         debug_assert!(bucket.left().is_null());
         debug_assert!(bucket.right().is_null());
@@ -274,6 +292,18 @@ mod tests {
     impl Ord for B {
         fn cmp(&self, other: &Self) -> std::cmp::Ordering {
             self.v.cmp(&other.v)
+        }
+    }
+
+    impl PartialEq<usize> for B {
+        fn eq(&self, other: &usize) -> bool {
+            &self.v == other
+        }
+    }
+
+    impl PartialOrd<usize> for B {
+        fn partial_cmp(&self, other: &usize) -> Option<Ordering> {
+            self.v.partial_cmp(other)
         }
     }
 
@@ -562,5 +592,67 @@ mod tests {
         }
 
         check_tree(tree);
+    }
+
+    #[test]
+    fn find_in_order() {
+        let mut buckets = build_buckets(256);
+        let mut tree = RBTree::new();
+
+        for i in (0..=256).filter(|i| i % 2 == 1) {
+            tree.insert(&mut buckets[i]);
+        }
+
+        for i in 0..=256 {
+            if i % 2 == 0 {
+                assert!(tree.find(&i) == None);
+            } else {
+                assert!(tree.find(&i) == Some(&buckets[i]));
+            }
+        }
+    }
+
+    #[test]
+    fn find_reverse_order() {
+        let mut buckets = build_buckets(256);
+        let mut tree = RBTree::new();
+
+        for i in (0..=256).rev().filter(|i| i % 2 == 1) {
+            tree.insert(&mut buckets[i]);
+        }
+
+        for i in 0..=256 {
+            if i % 2 == 0 {
+                assert!(tree.find(&i) == None);
+            } else {
+                assert!(tree.find(&i) == Some(&buckets[i]));
+            }
+        }
+    }
+
+    #[test]
+    fn find_alternate_order() {
+        let mut buckets = build_buckets(256);
+        let mut tree = RBTree::new();
+
+        let mut a = 0;
+        let mut b = 255;
+        while a < b {
+            tree.insert(&mut buckets[a + 1]);
+            tree.insert(&mut buckets[b]);
+            tree.insert(&mut buckets[b - 2]);
+            tree.insert(&mut buckets[a + 3]);
+
+            a += 4;
+            b -= 4;
+        }
+
+        for i in 0..=256 {
+            if i % 2 == 0 {
+                assert!(tree.find(&i) == None);
+            } else {
+                assert!(tree.find(&i) == Some(&buckets[i]));
+            }
+        }
     }
 }
