@@ -55,3 +55,9 @@ use ptr_list::PtrList;
 /// is.
 /// Note that if too large layout is requested, the bulk size may exceed this value.
 pub const MEMORY_CHUNK_SIZE: usize = 16384; // 16 KB
+
+struct MemBlock {
+    next: *mut Self,
+    len: usize,
+    _pinned: std::marker::PhantomPinned,
+}
