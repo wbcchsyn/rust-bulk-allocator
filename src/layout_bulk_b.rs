@@ -31,9 +31,10 @@
 
 // TODO: Finish this module and replace into layout_bulk_a
 
-use crate::MemBlock;
+use crate::{MemBlock, MEMORY_CHUNK_SIZE};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
+use std::mem::{align_of, size_of};
 
 type PointerList = *mut u8;
 
@@ -79,4 +80,72 @@ where
     to_free_list: Cell<PointerList>,
     pools: Cell<*mut MemBlock>,
     backend: B,
+}
+
+impl<B> UnsafeLayoutBulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    /// Calculates the layout that method alloc() returns.    
+    fn block_layout(layout: Layout) -> Layout {
+        let size = std::cmp::max(layout.size(), size_of::<MemBlock>());
+        let align = std::cmp::max(layout.align(), align_of::<MemBlock>());
+
+        let not_padded = unsafe { Layout::from_size_align_unchecked(size, align) };
+        let padded = not_padded.pad_to_align();
+
+        if MEMORY_CHUNK_SIZE < 2 * padded.size() + size_of::<PointerList>() {
+            not_padded
+        } else {
+            padded
+        }
+    }
+}
+
+#[cfg(test)]
+mod unsafe_layout_bulk_alloc_tests {
+    use super::*;
+    use gharial::GAlloc;
+
+    type A = UnsafeLayoutBulkAlloc<GAlloc>;
+
+    #[test]
+    fn test_block_layout() {
+        let check = |size, align| -> Layout {
+            let layout = Layout::from_size_align(size, align).unwrap();
+            let layout = A::block_layout(layout);
+
+            assert!(size <= layout.size());
+            assert!(size_of::<MemBlock>() <= layout.size());
+            assert!(align <= layout.align());
+            assert!(align_of::<MemBlock>() <= layout.align());
+
+            let max_size = std::cmp::max(size, size_of::<MemBlock>());
+            if max_size < layout.size() {
+                assert!(layout.size() % layout.align() == 0);
+                assert!(layout.size() - max_size < layout.align());
+            }
+
+            layout
+        };
+
+        for size in (1..64)
+            .chain(MEMORY_CHUNK_SIZE / 2 - 16..MEMORY_CHUNK_SIZE / 2 + 16)
+            .chain(MEMORY_CHUNK_SIZE - 16..MEMORY_CHUNK_SIZE + 16)
+        {
+            for align in [
+                1,
+                2,
+                4,
+                8,
+                16,
+                32,
+                MEMORY_CHUNK_SIZE / 2,
+                MEMORY_CHUNK_SIZE,
+                2 * MEMORY_CHUNK_SIZE,
+            ] {
+                check(size, align);
+            }
+        }
+    }
 }
