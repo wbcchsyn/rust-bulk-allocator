@@ -30,3 +30,53 @@
 // limitations under the License.
 
 // TODO: Finish this module and replace into layout_bulk_a
+
+use crate::MemBlock;
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::cell::Cell;
+
+type PointerList = *mut u8;
+
+/// `UnsafeLayoutBulkAlloc` is an implementation of `GlobalAlloc`.
+/// It caches memory blocks to allocate. If the cache is empty, acquires a memory chunk from the
+/// backend and makes a cache at first. The allocated memory chunks are freed on the drop at once.
+///
+/// To cache effectively, each instance assumes that [`alloc`] is passed same `layout` every
+/// time. The behavior is undefined if different `layout` is passed to the same
+/// `UnsafeLayoutBulkAlloc` instance. See [`alloc`] for details. (This is why named 'Unsafe'.)
+///
+/// The size of the memory chunk is usually same to [`MEMORY_CHUNK_SIZE`] unless `layout` passed
+/// to [`alloc`] is so large that at most one memory block can be acquired from
+/// [`MEMORY_CHUNK_SIZE`].
+///
+/// Method `dealloc` always caches the passed pointer. i.e. the memory will not be freed then. It
+/// is when the instance is dropped to deallocate the memories.
+///
+/// Instance drop releases all the memory chunks using the backend allocator. All the pointers
+/// allocated via the instance will be invalid after then. Accessing such a pointer
+/// may lead memory unsafety even if the pointer itself is not deallocated.
+///
+/// # Warnings
+///
+/// The allocated pointers via `UnsafeLayoutBulkAlloc` will be invalid after the instance is
+/// dropped. Accessing such a pointer may lead memory unsafety evenn if the pointer itself is
+/// not deallocated.
+///
+/// # Safety
+///
+/// The behavior is undefined if same instance is passed different `layout` to be called [`alloc`].
+///
+/// # Panics
+///
+/// Panics if different `layout` is passed to method [`alloc`] from that passed to the constructor.
+///
+/// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
+pub struct UnsafeLayoutBulkAlloc<B = System>
+where
+    B: GlobalAlloc,
+{
+    layout: Cell<Layout>, // Layout for u8 before initialized.
+    to_free_list: Cell<PointerList>,
+    pools: Cell<*mut MemBlock>,
+    backend: B,
+}
