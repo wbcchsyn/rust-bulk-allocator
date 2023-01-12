@@ -132,6 +132,61 @@ where
         }
     }
 
+    unsafe fn do_alloc(&self) -> *mut u8 {
+        debug_assert!(self.is_initialized());
+        let block_layout = self.layout.get();
+
+        if self.pools.get().is_null() {
+            // No memory is pooled.
+            // Acquire a memory chunk from backend and pools it at first.
+
+            let chunk_layout = Self::chunk_layout(block_layout);
+            let ptr = self.backend.alloc(chunk_layout);
+            if ptr.is_null() {
+                return null_mut();
+            }
+
+            // Take the end of the memory chunk as PointerList and append to self.to_free_list.
+            {
+                let offset = chunk_layout.size() - size_of::<PointerList>();
+                let pointer_list = ptr.add(offset);
+                *pointer_list.cast() = self.to_free_list.get();
+                self.to_free_list.set(pointer_list);
+            }
+
+            // Pool the rest of memory chunk
+            {
+                debug_assert_eq!(ptr as usize % align_of::<MemBlock>(), 0);
+                let block = ptr.cast::<MemBlock>();
+
+                let len = chunk_layout.size() - size_of::<PointerList>();
+                debug_assert!(size_of::<MemBlock>() <= len);
+
+                (*block).next = null_mut();
+                (*block).len = chunk_layout.size() - size_of::<PointerList>();
+
+                self.pools.set(block);
+            }
+        }
+
+        let block = self.pools.get();
+        if 2 * block_layout.size() <= (*block).len {
+            // Push back the rest of memory block.
+            let rest: *mut MemBlock = (block as *mut u8).add(block_layout.size()).cast();
+
+            debug_assert!(size_of::<MemBlock>() <= (*block).len - block_layout.size());
+            debug_assert_eq!(rest as usize % align_of::<MemBlock>(), 0);
+
+            (*rest).next = (*block).next;
+            (*rest).len = (*block).len - block_layout.size();
+            self.pools.set(rest);
+        } else {
+            self.pools.set((*block).next);
+        }
+
+        block.cast()
+    }
+
     unsafe fn do_dealloc(&self, ptr: *mut u8) {
         debug_assert!(self.is_initialized());
 
