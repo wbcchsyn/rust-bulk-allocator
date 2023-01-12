@@ -132,6 +132,16 @@ where
         }
     }
 
+    unsafe fn do_dealloc(&self, ptr: *mut u8) {
+        debug_assert!(self.is_initialized());
+
+        let layout = self.layout.get();
+        let block: &mut MemBlock = &mut *ptr.cast();
+        block.next = self.pools.get();
+        block.len = layout.size();
+        self.pools.set(block);
+    }
+
     fn is_initialized(&self) -> bool {
         self.layout.get() != Layout::new::<u8>()
     }
