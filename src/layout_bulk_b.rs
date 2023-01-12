@@ -100,6 +100,35 @@ where
             padded
         }
     }
+
+    /// Calculate the layout to allocate chunk memory from backend.
+    fn chunk_layout(block_layout: Layout) -> Layout {
+        debug_assert!(size_of::<MemBlock>() <= block_layout.size());
+        debug_assert!(align_of::<MemBlock>() <= block_layout.align());
+
+        if (0 < block_layout.size() % block_layout.align())
+            || (MEMORY_CHUNK_SIZE < 2 * block_layout.size() + size_of::<PointerList>())
+        {
+            // Not padded.
+            let size = unsafe {
+                Layout::from_size_align_unchecked(
+                    block_layout.size() + size_of::<PointerList>(),
+                    align_of::<PointerList>(),
+                )
+                .pad_to_align()
+                .size()
+            };
+            let align = block_layout.align();
+
+            let ret = unsafe { Layout::from_size_align_unchecked(size, align) };
+            debug_assert!(ret.size() % align_of::<PointerList>() == 0);
+            ret
+        } else {
+            let size = MEMORY_CHUNK_SIZE;
+            let align = block_layout.align();
+            unsafe { Layout::from_size_align_unchecked(size, align) }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -127,6 +156,55 @@ mod unsafe_layout_bulk_alloc_tests {
             }
 
             layout
+        };
+
+        for size in (1..64)
+            .chain(MEMORY_CHUNK_SIZE / 2 - 16..MEMORY_CHUNK_SIZE / 2 + 16)
+            .chain(MEMORY_CHUNK_SIZE - 16..MEMORY_CHUNK_SIZE + 16)
+        {
+            for align in [
+                1,
+                2,
+                4,
+                8,
+                16,
+                32,
+                MEMORY_CHUNK_SIZE / 2,
+                MEMORY_CHUNK_SIZE,
+                2 * MEMORY_CHUNK_SIZE,
+            ] {
+                check(size, align);
+            }
+        }
+    }
+
+    #[test]
+    fn test_chunk_layout() {
+        let check = |size, align| -> Layout {
+            let layout = Layout::from_size_align(size, align).unwrap();
+            let block_layout = A::block_layout(layout);
+            let chunk_layout = A::chunk_layout(block_layout);
+
+            assert!(size + size_of::<PointerList>() <= chunk_layout.size());
+            assert!(size_of::<MemBlock>() + size_of::<PointerList>() <= chunk_layout.size());
+
+            assert!(align <= chunk_layout.align());
+            assert!(align_of::<MemBlock>() <= chunk_layout.align());
+            assert!(chunk_layout.size() % align_of::<PointerList>() == 0);
+
+            if chunk_layout.size() != MEMORY_CHUNK_SIZE {
+                assert_eq!(
+                    (block_layout.size() + size_of::<PointerList>() + align_of::<PointerList>()
+                        - 1)
+                        / align_of::<PointerList>(),
+                    chunk_layout.size() / align_of::<PointerList>()
+                );
+
+                let padded = chunk_layout.pad_to_align();
+                assert!(MEMORY_CHUNK_SIZE < 2 * padded.size() + size_of::<PointerList>());
+            }
+
+            chunk_layout
         };
 
         for size in (1..64)
