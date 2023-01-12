@@ -109,6 +109,15 @@ where
     }
 }
 
+impl<B> Default for UnsafeLayoutBulkAlloc<B>
+where
+    B: GlobalAlloc + Default,
+{
+    fn default() -> Self {
+        Self::new(B::default())
+    }
+}
+
 impl<B> UnsafeLayoutBulkAlloc<B>
 where
     B: GlobalAlloc,
