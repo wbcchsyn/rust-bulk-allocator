@@ -82,10 +82,40 @@ where
     backend: B,
 }
 
+impl<B> Drop for UnsafeLayoutBulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    fn drop(&mut self) {
+        let mut it = self.to_free_list.get();
+
+        if it.is_null() {
+            debug_assert_eq!(self.is_initialized(), false);
+            return;
+        }
+
+        debug_assert_eq!(self.is_initialized(), true);
+        let layout = Self::chunk_layout(self.layout.get());
+        let offset = -1 * (layout.size() - size_of::<PointerList>()) as isize;
+
+        while !it.is_null() {
+            unsafe {
+                let ptr = it.offset(offset);
+                it = (*it.cast::<*mut PointerList>()).cast();
+                self.backend.dealloc(ptr, layout);
+            }
+        }
+    }
+}
+
 impl<B> UnsafeLayoutBulkAlloc<B>
 where
     B: GlobalAlloc,
 {
+    fn is_initialized(&self) -> bool {
+        self.layout.get() != Layout::new::<u8>()
+    }
+
     /// Calculates the layout that method alloc() returns.    
     fn block_layout(layout: Layout) -> Layout {
         let size = std::cmp::max(layout.size(), size_of::<MemBlock>());
