@@ -35,6 +35,7 @@ use crate::{MemBlock, MEMORY_CHUNK_SIZE};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::mem::{align_of, size_of};
+use std::ptr::null_mut;
 
 type PointerList = *mut u8;
 
@@ -112,6 +113,16 @@ impl<B> UnsafeLayoutBulkAlloc<B>
 where
     B: GlobalAlloc,
 {
+    /// Creates a new instance.
+    pub const fn new(backend: B) -> Self {
+        Self {
+            layout: Cell::new(Layout::new::<u8>()),
+            to_free_list: Cell::new(null_mut()),
+            pools: Cell::new(null_mut()),
+            backend,
+        }
+    }
+
     fn is_initialized(&self) -> bool {
         self.layout.get() != Layout::new::<u8>()
     }
@@ -167,6 +178,12 @@ mod unsafe_layout_bulk_alloc_tests {
     use gharial::GAlloc;
 
     type A = UnsafeLayoutBulkAlloc<GAlloc>;
+
+    #[test]
+    fn test_new() {
+        let backend = GAlloc::default();
+        let _ = A::new(backend);
+    }
 
     #[test]
     fn test_block_layout() {
