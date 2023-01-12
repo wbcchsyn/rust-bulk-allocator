@@ -118,6 +118,25 @@ where
     }
 }
 
+unsafe impl<B> GlobalAlloc for UnsafeLayoutBulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if !self.is_initialized() {
+            self.layout.set(Self::block_layout(layout));
+        } else {
+            debug_assert_eq!(self.layout.get(), Self::block_layout(layout));
+        }
+        self.do_alloc()
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        debug_assert_eq!(Self::block_layout(_layout), self.layout.get());
+        self.do_dealloc(ptr);
+    }
+}
+
 impl<B> UnsafeLayoutBulkAlloc<B>
 where
     B: GlobalAlloc,
@@ -344,6 +363,74 @@ mod unsafe_layout_bulk_alloc_tests {
                 2 * MEMORY_CHUNK_SIZE,
             ] {
                 check(size, align);
+            }
+        }
+    }
+
+    #[test]
+    fn test_alloc() {
+        let backend = GAlloc::default();
+
+        for size in (1..64)
+            .chain(MEMORY_CHUNK_SIZE / 2 - 16..MEMORY_CHUNK_SIZE / 2 + 16)
+            .chain(MEMORY_CHUNK_SIZE - 16..MEMORY_CHUNK_SIZE + 16)
+        {
+            for align in [
+                1,
+                2,
+                4,
+                8,
+                16,
+                32,
+                MEMORY_CHUNK_SIZE / 2,
+                MEMORY_CHUNK_SIZE,
+                2 * MEMORY_CHUNK_SIZE,
+            ] {
+                let layout = Layout::from_size_align(size, align).unwrap();
+                let alloc = A::new(backend.clone());
+
+                let blocks_in_chunk = {
+                    let block_layout = A::block_layout(layout);
+                    let chunk_layout = A::chunk_layout(block_layout);
+                    let blocks_in_chunk =
+                        (chunk_layout.size() - size_of::<PointerList>()) / block_layout.size();
+                    assert!(0 < blocks_in_chunk);
+                    blocks_in_chunk
+                };
+
+                unsafe {
+                    let mut pointers = Vec::new();
+                    for _ in 0..blocks_in_chunk {
+                        let ptr = alloc.alloc(layout);
+                        assert_eq!(ptr.is_null(), false);
+                        pointers.push(ptr);
+                    }
+
+                    assert_eq!(backend.providing_pointers().len(), 1);
+
+                    for ptr in pointers {
+                        alloc.dealloc(ptr, layout);
+                    }
+
+                    let mut pointers = Vec::new();
+                    for _ in 0..blocks_in_chunk {
+                        let ptr = alloc.alloc(layout);
+                        assert_eq!(ptr.is_null(), false);
+                        pointers.push(ptr);
+                    }
+                    assert_eq!(backend.providing_pointers().len(), 1);
+
+                    {
+                        let ptr = alloc.alloc(layout);
+                        assert_eq!(ptr.is_null(), false);
+                        pointers.push(ptr);
+                    }
+                    assert_eq!(backend.providing_pointers().len(), 2);
+
+                    for ptr in pointers {
+                        alloc.dealloc(ptr, layout);
+                    }
+                }
             }
         }
     }
