@@ -461,3 +461,34 @@ mod unsafe_layout_bulk_alloc_tests {
         }
     }
 }
+
+/// `LayoutBulkAlloc` is an implementation of `GlobalAlloc`.
+///
+/// This struct owns a memory pool to cache.
+/// Method [`alloc`] checks whether the required `layout` fits to the cache or not.
+///
+/// If the `layout` fits to the cache, [`alloc`] dispatches a memory block from the cache.
+/// (If the cache was empty, it allocates a memory chunk from the backend and make cache at first.)
+/// Otherwise, i.e. the `layout` does not fit to the cache, delegating the request to the backend.
+///
+/// Method [`dealloc`] caches the passed pointer if possible; otherwise, delegate the request to
+/// the backend. It is when the instance is dropped to free the cached memory.
+///
+/// Instance drop releases all the cached memory. All the pointers allocated via the instance will
+/// be invalid after then. Accessing such a pointer may lead memory unsafety even if the pointer
+/// itself is not deallocated.
+///
+/// # Warnings
+///
+/// The allocated pointers via `LayoutBulkAlloc` will be invalid after the instance is
+/// dropped. Accessing such a pointer may lead memory unsafety evenn if the pointer itself is
+/// not deallocated.
+///
+/// [`alloc`]: #impl-GlobalAlloc-for-LayoutBulkAlloc<B>
+/// [`dealloc`]: #impl-GlobalAlloc-for-LayoutBulkAlloc<B>
+pub struct LayoutBulkAlloc<B = System>
+where
+    B: GlobalAlloc,
+{
+    backend: UnsafeLayoutBulkAlloc<B>,
+}
