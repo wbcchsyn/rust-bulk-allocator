@@ -92,7 +92,6 @@ where
         let mut it = self.to_free_list.get();
 
         if it.is_null() {
-            debug_assert_eq!(self.is_initialized(), false);
             return;
         }
 
@@ -491,4 +490,46 @@ where
     B: GlobalAlloc,
 {
     backend: UnsafeLayoutBulkAlloc<B>,
+}
+
+impl<B> LayoutBulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    /// Creates a new instance.
+    pub fn new(layout: Layout, backend: B) -> Self {
+        let backend = UnsafeLayoutBulkAlloc::<B>::new(backend);
+        let layout = UnsafeLayoutBulkAlloc::<B>::block_layout(layout);
+        backend.layout.set(layout);
+
+        Self { backend }
+    }
+}
+
+#[cfg(test)]
+mod layout_bulk_alloc_tests {
+    use super::*;
+
+    #[test]
+    fn test_new() {
+        for size in (1..64)
+            .chain(MEMORY_CHUNK_SIZE / 2 - 16..MEMORY_CHUNK_SIZE / 2 + 16)
+            .chain(MEMORY_CHUNK_SIZE - 16..MEMORY_CHUNK_SIZE + 16)
+        {
+            for align in [
+                1,
+                2,
+                4,
+                8,
+                16,
+                32,
+                MEMORY_CHUNK_SIZE / 2,
+                MEMORY_CHUNK_SIZE,
+                2 * MEMORY_CHUNK_SIZE,
+            ] {
+                let layout = Layout::from_size_align(size, align).unwrap();
+                let _ = LayoutBulkAlloc::new(layout, System);
+            }
+        }
+    }
 }
