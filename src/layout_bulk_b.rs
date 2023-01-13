@@ -73,6 +73,7 @@ type PointerList = *mut u8;
 /// Panics if different `layout` is passed to method [`alloc`] from that passed to the constructor.
 ///
 /// [`MEMORY_CHUNK_SIZE`]: constant.MEMORY_CHUNK_SIZE.html
+/// [`alloc`]: #impl-GlobalAlloc-for-UnsafeLayoutBulkAlloc<B>
 pub struct UnsafeLayoutBulkAlloc<B = System>
 where
     B: GlobalAlloc,
@@ -122,6 +123,31 @@ unsafe impl<B> GlobalAlloc for UnsafeLayoutBulkAlloc<B>
 where
     B: GlobalAlloc,
 {
+    /// Dispatches memory block from the cache. If the cache was empty, acquires a memory chunk
+    /// chunk from the backend and makes a cache at first.
+    ///
+    /// Each instance takes only one `layout`; otherwise, the behavior is not defined. (This is why
+    /// named `Unsafe`.) i.e. if `alloc` is called once, user must pass the same `layout` after that.
+    ///
+    /// ```
+    /// use bulk_allocator::UnsafeLayoutBulkAlloc;
+    /// use std::alloc::{GlobalAlloc, Layout, System};
+    ///
+    /// let allocator = UnsafeLayoutBulkAlloc::new(System);
+    ///
+    /// // The first call fixes the layout.
+    /// let layout0 = Layout::new::<usize>();
+    /// let ptr = unsafe { allocator.alloc(layout0) };
+    ///
+    /// // The second call uses same layout. This is OK.
+    /// let layout1 = Layout::new::<usize>();
+    /// let ptr = unsafe { allocator.alloc(layout1) };
+    ///
+    /// // !!! Dangerous !!!
+    /// // layout2 is different from layout0.
+    /// let layout2 = Layout::new::<u16>();
+    /// // let ptr = unsafe { allocator.alloc(layout2) };
+    /// ```
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if !self.is_initialized() {
             self.layout.set(Self::block_layout(layout));
