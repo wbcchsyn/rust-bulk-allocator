@@ -92,7 +92,6 @@ where
         let mut it = self.to_free_list.get();
 
         if it.is_null() {
-            debug_assert_eq!(self.is_initialized(), false);
             return;
         }
 
@@ -457,6 +456,242 @@ mod unsafe_layout_bulk_alloc_tests {
                         alloc.dealloc(ptr, layout);
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn test_alloc_and_use() {
+        let backend = GAlloc::default();
+
+        unsafe {
+            let alloc = A::new(backend.clone());
+            let layout = Layout::new::<u8>();
+            let mut pointers = Vec::new();
+
+            for i in (0..=255).cycle().take(65535) {
+                let ptr = alloc.alloc(layout);
+                *ptr = i;
+                pointers.push(ptr);
+            }
+
+            for i in 0..65535 {
+                let ptr = pointers[i];
+                assert_eq!(*ptr, i as u8);
+                alloc.dealloc(ptr, layout);
+            }
+        }
+
+        unsafe {
+            let alloc = A::new(backend.clone());
+            let layout = Layout::new::<u128>();
+            let mut pointers = Vec::new();
+
+            for i in 0..65535 {
+                let ptr = alloc.alloc(layout);
+                *(ptr.cast::<u128>()) = i;
+                pointers.push(ptr);
+            }
+
+            for i in 0..65535 {
+                let ptr = pointers[i as usize];
+                assert_eq!(*(ptr.cast::<u128>()), i);
+                alloc.dealloc(ptr, layout);
+            }
+        }
+    }
+}
+
+/// `LayoutBulkAlloc` is an implementation of `GlobalAlloc`.
+///
+/// This struct owns a memory pool to cache.
+/// Method [`alloc`] checks whether the required `layout` fits to the cache or not.
+///
+/// If the `layout` fits to the cache, [`alloc`] dispatches a memory block from the cache.
+/// (If the cache was empty, it allocates a memory chunk from the backend and make cache at first.)
+/// Otherwise, i.e. the `layout` does not fit to the cache, delegating the request to the backend.
+///
+/// Method [`dealloc`] caches the passed pointer if possible; otherwise, delegate the request to
+/// the backend. It is when the instance is dropped to free the cached memory.
+///
+/// Instance drop releases all the cached memory. All the pointers allocated via the instance will
+/// be invalid after then. Accessing such a pointer may lead memory unsafety even if the pointer
+/// itself is not deallocated.
+///
+/// # Warnings
+///
+/// The allocated pointers via `LayoutBulkAlloc` will be invalid after the instance is
+/// dropped. Accessing such a pointer may lead memory unsafety evenn if the pointer itself is
+/// not deallocated.
+///
+/// [`alloc`]: #impl-GlobalAlloc-for-LayoutBulkAlloc<B>
+/// [`dealloc`]: #impl-GlobalAlloc-for-LayoutBulkAlloc<B>
+pub struct LayoutBulkAlloc<B = System>
+where
+    B: GlobalAlloc,
+{
+    backend: UnsafeLayoutBulkAlloc<B>,
+}
+
+unsafe impl<B> GlobalAlloc for LayoutBulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if UnsafeLayoutBulkAlloc::<B>::block_layout(layout) == self.backend.layout.get() {
+            self.backend.do_alloc()
+        } else {
+            self.backend.backend.alloc(layout)
+        }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if UnsafeLayoutBulkAlloc::<B>::block_layout(layout) == self.backend.layout.get() {
+            self.backend.do_dealloc(ptr)
+        } else {
+            self.backend.backend.dealloc(ptr, layout)
+        }
+    }
+}
+
+impl<B> LayoutBulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    /// Creates a new instance.
+    pub fn new(layout: Layout, backend: B) -> Self {
+        let backend = UnsafeLayoutBulkAlloc::<B>::new(backend);
+        let layout = UnsafeLayoutBulkAlloc::<B>::block_layout(layout);
+        backend.layout.set(layout);
+
+        Self { backend }
+    }
+}
+
+#[cfg(test)]
+mod layout_bulk_alloc_tests {
+    use super::*;
+    use gharial::GAlloc;
+
+    type A = LayoutBulkAlloc<GAlloc>;
+
+    #[test]
+    fn test_new() {
+        for size in (1..64)
+            .chain(MEMORY_CHUNK_SIZE / 2 - 16..MEMORY_CHUNK_SIZE / 2 + 16)
+            .chain(MEMORY_CHUNK_SIZE - 16..MEMORY_CHUNK_SIZE + 16)
+        {
+            for align in [
+                1,
+                2,
+                4,
+                8,
+                16,
+                32,
+                MEMORY_CHUNK_SIZE / 2,
+                MEMORY_CHUNK_SIZE,
+                2 * MEMORY_CHUNK_SIZE,
+            ] {
+                let layout = Layout::from_size_align(size, align).unwrap();
+                let _ = LayoutBulkAlloc::new(layout, System);
+            }
+        }
+    }
+
+    #[test]
+    fn test_alloc() {
+        let backend = GAlloc::default();
+
+        for size in (1..64)
+            .chain(MEMORY_CHUNK_SIZE / 2 - 16..MEMORY_CHUNK_SIZE / 2 + 16)
+            .chain(MEMORY_CHUNK_SIZE - 16..MEMORY_CHUNK_SIZE + 16)
+        {
+            for align in [
+                1,
+                2,
+                4,
+                8,
+                16,
+                32,
+                MEMORY_CHUNK_SIZE / 2,
+                MEMORY_CHUNK_SIZE,
+                2 * MEMORY_CHUNK_SIZE,
+            ] {
+                let layout = Layout::from_size_align(size, align).unwrap();
+                let alloc = A::new(layout, backend.clone());
+
+                let blocks_in_chunk = {
+                    let block_layout = UnsafeLayoutBulkAlloc::<System>::block_layout(layout);
+                    let chunk_layout = UnsafeLayoutBulkAlloc::<System>::chunk_layout(block_layout);
+                    let blocks_in_chunk =
+                        (chunk_layout.size() - size_of::<PointerList>()) / block_layout.size();
+                    assert!(0 < blocks_in_chunk);
+                    blocks_in_chunk
+                };
+
+                unsafe {
+                    for _ in 0..2 {
+                        let mut pointers = Vec::new();
+                        for _ in 0..blocks_in_chunk {
+                            let ptr = alloc.alloc(layout);
+                            assert_eq!(ptr.is_null(), false);
+                            pointers.push(ptr);
+                        }
+
+                        for s in 1..32 {
+                            let layout = Layout::from_size_align(s, align).unwrap();
+                            let ptr = alloc.alloc(layout);
+                            assert_eq!(ptr.is_null(), false);
+                            pointers.push(ptr);
+                        }
+
+                        for i in 0..blocks_in_chunk {
+                            let ptr = pointers[i];
+                            alloc.dealloc(ptr, layout);
+                        }
+
+                        for s in 1..32 {
+                            let layout = Layout::from_size_align(s, align).unwrap();
+                            let i = blocks_in_chunk + s - 1;
+                            let ptr = pointers[i];
+                            alloc.dealloc(ptr, layout);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_alloc_and_use() {
+        let backend = GAlloc::default();
+
+        unsafe {
+            let alloc = A::new(Layout::new::<u8>(), backend.clone());
+            let mut pointers = Vec::new();
+
+            for i in 0..65535 {
+                let ptr = alloc.alloc(Layout::new::<u8>());
+                *ptr = i as u8;
+                pointers.push(ptr);
+            }
+
+            for i in 0..65535 {
+                let ptr = alloc.alloc(Layout::new::<u128>());
+                *(ptr.cast::<u128>()) = i;
+                pointers.push(ptr);
+            }
+
+            for i in 0..65535 {
+                let ptr = pointers[i];
+                assert_eq!(*ptr, i as u8);
+                alloc.dealloc(ptr, Layout::new::<u8>());
+            }
+
+            for i in 0..65535 {
+                let ptr = pointers[i + 65535];
+                assert_eq!(*(ptr.cast::<u128>()), i as u128);
+                alloc.dealloc(ptr, Layout::new::<u128>());
             }
         }
     }
