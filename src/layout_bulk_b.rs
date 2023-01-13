@@ -661,4 +661,38 @@ mod layout_bulk_alloc_tests {
             }
         }
     }
+
+    #[test]
+    fn test_alloc_and_use() {
+        let backend = GAlloc::default();
+
+        unsafe {
+            let alloc = A::new(Layout::new::<u8>(), backend.clone());
+            let mut pointers = Vec::new();
+
+            for i in 0..65535 {
+                let ptr = alloc.alloc(Layout::new::<u8>());
+                *ptr = i as u8;
+                pointers.push(ptr);
+            }
+
+            for i in 0..65535 {
+                let ptr = alloc.alloc(Layout::new::<u128>());
+                *(ptr.cast::<u128>()) = i;
+                pointers.push(ptr);
+            }
+
+            for i in 0..65535 {
+                let ptr = pointers[i];
+                assert_eq!(*ptr, i as u8);
+                alloc.dealloc(ptr, Layout::new::<u8>());
+            }
+
+            for i in 0..65535 {
+                let ptr = pointers[i + 65535];
+                assert_eq!(*(ptr.cast::<u128>()), i as u128);
+                alloc.dealloc(ptr, Layout::new::<u128>());
+            }
+        }
+    }
 }
