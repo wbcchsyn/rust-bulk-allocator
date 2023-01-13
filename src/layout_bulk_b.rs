@@ -459,6 +459,47 @@ mod unsafe_layout_bulk_alloc_tests {
             }
         }
     }
+
+    #[test]
+    fn test_alloc_and_use() {
+        let backend = GAlloc::default();
+
+        unsafe {
+            let alloc = A::new(backend.clone());
+            let layout = Layout::new::<u8>();
+            let mut pointers = Vec::new();
+
+            for i in (0..=255).cycle().take(65535) {
+                let ptr = alloc.alloc(layout);
+                *ptr = i;
+                pointers.push(ptr);
+            }
+
+            for i in 0..65535 {
+                let ptr = pointers[i];
+                assert_eq!(*ptr, i as u8);
+                alloc.dealloc(ptr, layout);
+            }
+        }
+
+        unsafe {
+            let alloc = A::new(backend.clone());
+            let layout = Layout::new::<u128>();
+            let mut pointers = Vec::new();
+
+            for i in 0..65535 {
+                let ptr = alloc.alloc(layout);
+                *(ptr.cast::<u128>()) = i;
+                pointers.push(ptr);
+            }
+
+            for i in 0..65535 {
+                let ptr = pointers[i as usize];
+                assert_eq!(*(ptr.cast::<u128>()), i);
+                alloc.dealloc(ptr, layout);
+            }
+        }
+    }
 }
 
 /// `LayoutBulkAlloc` is an implementation of `GlobalAlloc`.
