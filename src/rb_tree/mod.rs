@@ -209,17 +209,21 @@ where
         }
     }
 
-    pub fn remove<K>(&mut self, key: &K) -> Option<&mut B>
+    pub fn remove<K>(&mut self, key: &K) -> *mut B
     where
         B: PartialOrd<K>,
     {
         unsafe {
-            let root = self.root.as_mut()?;
+            if self.root.is_null() {
+                return null_mut();
+            }
+
+            let root = &mut *self.root;
             let (new_root, ret, _) = Self::iter_remove(root, key);
 
             self.root = new_root;
             self.root.as_mut().map(|root| root.set_color(Color::Black));
-            ret.as_mut()
+            ret
         }
     }
 
@@ -597,10 +601,10 @@ mod tests {
 
                 for &i in remove_order.iter() {
                     let ptr = tree.remove(&i);
-                    assert!(ptr == Some(&mut buckets[i]));
+                    assert!(ptr == &mut buckets[i]);
 
                     let ptr = tree.remove(&i);
-                    assert!(ptr == None);
+                    assert!(ptr.is_null());
 
                     check_tree(&tree);
                 }
@@ -622,10 +626,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -641,10 +645,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -662,18 +666,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == Some(&mut buckets[a]));
+            assert!(ptr == &mut buckets[a]);
 
             let ptr = tree.remove(&a);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == Some(&mut buckets[b]));
+            assert!(ptr == &mut buckets[b]);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
@@ -692,10 +696,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -711,10 +715,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -732,18 +736,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == Some(&mut buckets[a]));
+            assert!(ptr == &mut buckets[a]);
 
             let ptr = tree.remove(&a);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == Some(&mut buckets[b]));
+            assert!(ptr == &mut buckets[b]);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
@@ -771,10 +775,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -799,10 +803,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -829,18 +833,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == Some(&mut buckets[a]));
+            assert!(ptr == &mut buckets[a]);
 
             let ptr = tree.remove(&a);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == Some(&mut buckets[b]));
+            assert!(ptr == &mut buckets[b]);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
