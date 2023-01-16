@@ -29,6 +29,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cmp::Ordering;
 use std::ptr::null_mut;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,6 +105,26 @@ impl<B> RBTree<B>
 where
     B: Bucket,
 {
+    /// # Safety
+    ///
+    /// The caller must not update where the return value points to change the order.
+    pub unsafe fn find<K>(&self, key: &K) -> *mut B
+    where
+        B: PartialOrd<K>,
+    {
+        let mut it = self.root;
+
+        while let Some(bucket) = it.as_ref() {
+            match bucket.partial_cmp(key).unwrap() {
+                Ordering::Less => it = bucket.right(),
+                Ordering::Equal => return it,
+                Ordering::Greater => it = bucket.left(),
+            }
+        }
+
+        null_mut()
+    }
+
     pub fn insert(&mut self, bucket: &mut B)
     where
         B: Ord,
@@ -992,6 +1013,96 @@ mod tests {
                 assert!(ptr == &mut buckets[j]);
                 check_tree(&tree);
             }
+        }
+    }
+
+    #[test]
+    fn test_permutation_find() {
+        const LEN: usize = 12;
+        let mut order: Vec<usize> = (0..LEN).collect();
+
+        while {
+            let mut tree = RBTree::new();
+            let mut buckets = B::build(LEN);
+            order.iter().for_each(|&i| tree.insert(&mut buckets[i]));
+
+            for i in 0..LEN {
+                let ptr = unsafe { tree.find(&i) };
+                assert!(ptr == &mut buckets[i]);
+            }
+
+            {
+                let ptr = unsafe { tree.find(&LEN) };
+                assert!(ptr.is_null());
+            }
+
+            permutation_next(&mut order)
+        } {}
+    }
+
+    #[test]
+    fn test_insert_in_order_find() {
+        const LEN: usize = 128;
+
+        let mut tree = RBTree::new();
+        let mut buckets = B::build(LEN);
+        buckets.iter_mut().for_each(|b| tree.insert(b));
+
+        for i in 0..LEN {
+            let ptr = unsafe { tree.find(&i) };
+            assert!(ptr == &mut buckets[i]);
+        }
+
+        {
+            let ptr = unsafe { tree.find(&LEN) };
+            assert!(ptr.is_null());
+        }
+    }
+
+    #[test]
+    fn test_insert_rev_order_find() {
+        const LEN: usize = 128;
+
+        let mut tree = RBTree::new();
+        let mut buckets = B::build(LEN);
+        buckets.iter_mut().rev().for_each(|b| tree.insert(b));
+
+        for i in 0..LEN {
+            let ptr = unsafe { tree.find(&i) };
+            assert!(ptr == &mut buckets[i]);
+        }
+
+        {
+            let ptr = unsafe { tree.find(&LEN) };
+            assert!(ptr.is_null());
+        }
+    }
+
+    #[test]
+    fn test_insert_alternate_find() {
+        const LEN: usize = 128;
+
+        let mut tree = RBTree::new();
+        let mut buckets = B::build(LEN);
+
+        let mut a = 0;
+        let mut b = LEN - 1;
+        while a < b {
+            tree.insert(&mut buckets[a]);
+            tree.insert(&mut buckets[b]);
+
+            a += 1;
+            b -= 1;
+        }
+
+        for i in 0..LEN {
+            let ptr = unsafe { tree.find(&i) };
+            assert!(ptr == &mut buckets[i]);
+        }
+
+        {
+            let ptr = unsafe { tree.find(&LEN) };
+            assert!(ptr.is_null());
         }
     }
 }
