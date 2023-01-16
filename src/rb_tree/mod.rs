@@ -232,31 +232,7 @@ where
         B: PartialOrd<K>,
     {
         if (parent as &B) == key {
-            match parent.right().as_mut() {
-                None => {
-                    return (
-                        parent.left(),
-                        parent,
-                        Balance::from(parent.color() == Color::Red),
-                    )
-                }
-                Some(right) => {
-                    let (new_parent, balance) = Self::pop_min(parent, (right, Direction::Right));
-                    let new_parent = &mut *new_parent;
-                    new_parent.set_left(parent.left());
-                    new_parent.set_right(parent.right());
-                    new_parent.set_color(parent.color());
-
-                    match balance {
-                        Balance::Ok => return (new_parent, parent, Balance::Ok),
-                        Balance::Bad => {
-                            let (new_parent, balance) =
-                                Self::remove_rotate(new_parent, (right, Direction::Right));
-                            return (new_parent, parent, balance);
-                        }
-                    }
-                }
-            }
+            return Self::remove_bucket(parent);
         }
 
         let d = if (parent as &B) < key {
@@ -277,6 +253,35 @@ where
                         (parent, bucket, balance)
                     }
                     Balance::Ok => (parent, bucket, Balance::Ok),
+                }
+            }
+        }
+    }
+
+    unsafe fn remove_bucket(bucket: &mut B) -> (*mut B, *mut B, Balance) {
+        match bucket.right().as_mut() {
+            None => {
+                return (
+                    bucket.left(),
+                    bucket,
+                    Balance::from(bucket.color() == Color::Red),
+                )
+            }
+            Some(right) => {
+                let (new_bucket, balance) = Self::pop_min(bucket, (right, Direction::Right));
+                let new_bucket = &mut *new_bucket;
+
+                new_bucket.set_left(bucket.left());
+                new_bucket.set_right(bucket.right());
+                new_bucket.set_color(bucket.color());
+
+                match balance {
+                    Balance::Ok => (new_bucket, bucket, Balance::Ok),
+                    Balance::Bad => {
+                        let (new_bucket, balance) =
+                            Self::remove_rotate(new_bucket, (right, Direction::Right));
+                        (new_bucket, bucket, balance)
+                    }
                 }
             }
         }
