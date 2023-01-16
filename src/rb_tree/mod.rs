@@ -209,6 +209,61 @@ where
         }
     }
 
+    pub fn remove_lower_bound<K>(&mut self, key: &K) -> *mut B
+    where
+        B: PartialOrd<K>,
+    {
+        unsafe {
+            if self.root.is_null() {
+                return null_mut();
+            }
+
+            let root = &mut *self.root;
+            let (new_root, ret, _) = Self::iter_remove_lower_bound(root, key);
+
+            self.root = new_root;
+            self.root.as_mut().map(|root| root.set_color(Color::Black));
+            ret
+        }
+    }
+
+    unsafe fn iter_remove_lower_bound<K>(parent: &mut B, key: &K) -> (*mut B, *mut B, Balance)
+    where
+        B: PartialOrd<K>,
+    {
+        if (parent as &B) == key {
+            return Self::remove_bucket(parent);
+        }
+
+        let d = if (parent as &B) < key {
+            Direction::Right
+        } else {
+            Direction::Left
+        };
+
+        let ret: (*mut B, *mut B, Balance) = match parent.child(d).as_mut() {
+            None => (parent, null_mut(), Balance::Ok),
+            Some(child) => {
+                let (child, bucket, balance) = Self::iter_remove_lower_bound(child, key);
+                parent.set_child(child, d);
+
+                match balance {
+                    Balance::Bad => {
+                        let (parent, balance) = Self::remove_rotate(parent, (child, d));
+                        (parent, bucket, balance)
+                    }
+                    Balance::Ok => (parent, bucket, Balance::Ok),
+                }
+            }
+        };
+
+        if d == Direction::Left && ret.1.is_null() {
+            Self::remove_bucket(parent)
+        } else {
+            ret
+        }
+    }
+
     pub fn remove<K>(&mut self, key: &K) -> *mut B
     where
         B: PartialOrd<K>,
@@ -855,6 +910,88 @@ mod tests {
 
             a += 1;
             b -= 1;
+        }
+    }
+
+    #[test]
+    fn test_remove_lower_bound_permutation() {
+        const LEN: usize = 12;
+        let mut order: Vec<usize> = (0..LEN).collect();
+
+        for i in 0..LEN {
+            while {
+                let mut tree = RBTree::new();
+                let mut buckets = B::build(LEN);
+                order.iter().for_each(|&i| tree.insert(&mut buckets[i]));
+
+                for j in i..LEN {
+                    let ptr = tree.remove_lower_bound(&i);
+                    assert!(ptr == &mut buckets[j]);
+                    check_tree(&tree);
+                }
+
+                permutation_next(&mut order)
+            } {}
+        }
+    }
+
+    #[test]
+    fn test_insert_in_order_remove_lower_bound() {
+        const LEN: usize = 128;
+
+        for i in 0..LEN {
+            let mut tree = RBTree::new();
+            let mut buckets = B::build(LEN);
+            buckets.iter_mut().for_each(|b| tree.insert(b));
+
+            for j in i..LEN {
+                let ptr = tree.remove_lower_bound(&i);
+                assert!(ptr == &mut buckets[j]);
+                check_tree(&tree);
+            }
+        }
+    }
+
+    #[test]
+    fn test_insert_rev_order_remove_lower_bound() {
+        const LEN: usize = 128;
+
+        for i in 0..LEN {
+            let mut tree = RBTree::new();
+            let mut buckets = B::build(LEN);
+            buckets.iter_mut().rev().for_each(|b| tree.insert(b));
+
+            for j in i..LEN {
+                let ptr = tree.remove_lower_bound(&i);
+                assert!(ptr == &mut buckets[j]);
+                check_tree(&tree);
+            }
+        }
+    }
+
+    #[test]
+    fn test_insert_alternate_order_remove_lower_bound() {
+        const LEN: usize = 128;
+
+        for i in 0..LEN {
+            let mut tree = RBTree::new();
+            let mut buckets = B::build(LEN);
+
+            let mut a = 0;
+            let mut b = LEN - 1;
+            while a < b {
+                tree.insert(&mut buckets[a]);
+                tree.insert(&mut buckets[b]);
+
+                a += 1;
+                b -= 1;
+            }
+
+            for j in i..LEN {
+                let ptr = tree.remove_lower_bound(&i);
+                assert!(ptr == &mut buckets[j]);
+                check_tree(&tree);
+            }
         }
     }
 }
