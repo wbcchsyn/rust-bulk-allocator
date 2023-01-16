@@ -46,6 +46,7 @@ mod bulk_a;
 mod layout_bulk_a;
 mod layout_bulk_b;
 mod ptr_list;
+mod rb_tree;
 
 pub use bulk_a::{BulkA, UnBulkA};
 pub use layout_bulk_a::{LayoutBulkA, UnLayoutBulkA};
