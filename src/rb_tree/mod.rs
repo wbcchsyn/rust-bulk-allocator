@@ -29,6 +29,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cmp::Ordering;
 use std::ptr::null_mut;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,6 +105,26 @@ impl<B> RBTree<B>
 where
     B: Bucket,
 {
+    /// # Safety
+    ///
+    /// The caller must not update where the return value points to change the order.
+    pub unsafe fn find<K>(&self, key: &K) -> *mut B
+    where
+        B: PartialOrd<K>,
+    {
+        let mut it = self.root;
+
+        while let Some(bucket) = it.as_ref() {
+            match bucket.partial_cmp(key).unwrap() {
+                Ordering::Less => it = bucket.right(),
+                Ordering::Equal => return it,
+                Ordering::Greater => it = bucket.left(),
+            }
+        }
+
+        null_mut()
+    }
+
     pub fn insert(&mut self, bucket: &mut B)
     where
         B: Ord,
@@ -209,50 +230,55 @@ where
         }
     }
 
-    pub fn remove<K>(&mut self, key: &K) -> Option<&mut B>
+    pub fn remove_lower_bound<K>(&mut self, key: &K) -> *mut B
     where
         B: PartialOrd<K>,
     {
         unsafe {
-            let root = self.root.as_mut()?;
-            let (new_root, ret, _) = Self::iter_remove(root, key);
+            if self.root.is_null() {
+                return null_mut();
+            }
+
+            let root = &mut *self.root;
+            let (new_root, ret, _) = Self::iter_remove(root, key, |ret| {
+                if ret.1.is_null() && &*ret.0 > key {
+                    Self::remove_bucket(&mut *ret.0)
+                } else {
+                    ret
+                }
+            });
 
             self.root = new_root;
             self.root.as_mut().map(|root| root.set_color(Color::Black));
-            ret.as_mut()
+            ret
         }
     }
 
-    unsafe fn iter_remove<K>(parent: &mut B, key: &K) -> (*mut B, *mut B, Balance)
+    pub fn remove<K>(&mut self, key: &K) -> *mut B
     where
         B: PartialOrd<K>,
     {
-        if (parent as &B) == key {
-            match parent.right().as_mut() {
-                None => {
-                    return (
-                        parent.left(),
-                        parent,
-                        Balance::from(parent.color() == Color::Red),
-                    )
-                }
-                Some(right) => {
-                    let (new_parent, balance) = Self::pop_min(parent, (right, Direction::Right));
-                    let new_parent = &mut *new_parent;
-                    new_parent.set_left(parent.left());
-                    new_parent.set_right(parent.right());
-                    new_parent.set_color(parent.color());
-
-                    match balance {
-                        Balance::Ok => return (new_parent, parent, Balance::Ok),
-                        Balance::Bad => {
-                            let (new_parent, balance) =
-                                Self::remove_rotate(new_parent, (right, Direction::Right));
-                            return (new_parent, parent, balance);
-                        }
-                    }
-                }
+        unsafe {
+            if self.root.is_null() {
+                return null_mut();
             }
+
+            let root = &mut *self.root;
+            let (new_root, ret, _) = Self::iter_remove(root, key, |ret| ret);
+
+            self.root = new_root;
+            self.root.as_mut().map(|root| root.set_color(Color::Black));
+            ret
+        }
+    }
+
+    unsafe fn iter_remove<K, F>(parent: &mut B, key: &K, f: F) -> (*mut B, *mut B, Balance)
+    where
+        B: PartialOrd<K>,
+        F: Copy + Fn((*mut B, *mut B, Balance)) -> (*mut B, *mut B, Balance),
+    {
+        if (parent as &B) == key {
+            return Self::remove_bucket(parent);
         }
 
         let d = if (parent as &B) < key {
@@ -261,10 +287,10 @@ where
             Direction::Left
         };
 
-        match parent.child(d).as_mut() {
-            None => return (parent, null_mut(), Balance::Ok),
+        let ret: (*mut B, *mut B, Balance) = match parent.child(d).as_mut() {
+            None => (parent, null_mut(), Balance::Ok),
             Some(child) => {
-                let (child, bucket, balance) = Self::iter_remove(child, key);
+                let (child, bucket, balance) = Self::iter_remove(child, key, f);
                 parent.set_child(child, d);
 
                 match balance {
@@ -273,6 +299,37 @@ where
                         (parent, bucket, balance)
                     }
                     Balance::Ok => (parent, bucket, Balance::Ok),
+                }
+            }
+        };
+
+        f(ret)
+    }
+
+    unsafe fn remove_bucket(bucket: &mut B) -> (*mut B, *mut B, Balance) {
+        match bucket.right().as_mut() {
+            None => {
+                return (
+                    bucket.left(),
+                    bucket,
+                    Balance::from(bucket.color() == Color::Red),
+                )
+            }
+            Some(right) => {
+                let (new_bucket, balance) = Self::pop_min(bucket, (right, Direction::Right));
+                let new_bucket = &mut *new_bucket;
+
+                new_bucket.set_left(bucket.left());
+                new_bucket.set_right(bucket.right());
+                new_bucket.set_color(bucket.color());
+
+                match balance {
+                    Balance::Ok => (new_bucket, bucket, Balance::Ok),
+                    Balance::Bad => {
+                        let (new_bucket, balance) =
+                            Self::remove_rotate(new_bucket, (right, Direction::Right));
+                        (new_bucket, bucket, balance)
+                    }
                 }
             }
         }
@@ -597,10 +654,10 @@ mod tests {
 
                 for &i in remove_order.iter() {
                     let ptr = tree.remove(&i);
-                    assert!(ptr == Some(&mut buckets[i]));
+                    assert!(ptr == &mut buckets[i]);
 
                     let ptr = tree.remove(&i);
-                    assert!(ptr == None);
+                    assert!(ptr.is_null());
 
                     check_tree(&tree);
                 }
@@ -622,10 +679,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -641,10 +698,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -662,18 +719,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == Some(&mut buckets[a]));
+            assert!(ptr == &mut buckets[a]);
 
             let ptr = tree.remove(&a);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == Some(&mut buckets[b]));
+            assert!(ptr == &mut buckets[b]);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
@@ -692,10 +749,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -711,10 +768,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -732,18 +789,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == Some(&mut buckets[a]));
+            assert!(ptr == &mut buckets[a]);
 
             let ptr = tree.remove(&a);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == Some(&mut buckets[b]));
+            assert!(ptr == &mut buckets[b]);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
@@ -771,10 +828,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -799,10 +856,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == Some(&mut buckets[i]));
+            assert!(ptr == &mut buckets[i]);
 
             let ptr = tree.remove(&i);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
         }
@@ -829,23 +886,195 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == Some(&mut buckets[a]));
+            assert!(ptr == &mut buckets[a]);
 
             let ptr = tree.remove(&a);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == Some(&mut buckets[b]));
+            assert!(ptr == &mut buckets[b]);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == None);
+            assert!(ptr.is_null());
 
             check_tree(&tree);
 
             a += 1;
             b -= 1;
+        }
+    }
+
+    #[test]
+    fn test_remove_lower_bound_permutation() {
+        const LEN: usize = 12;
+        let mut order: Vec<usize> = (0..LEN).collect();
+
+        for i in 0..LEN {
+            while {
+                let mut tree = RBTree::new();
+                let mut buckets = B::build(LEN);
+                order.iter().for_each(|&i| tree.insert(&mut buckets[i]));
+
+                for j in i..LEN {
+                    let ptr = tree.remove_lower_bound(&i);
+                    assert!(ptr == &mut buckets[j]);
+                    check_tree(&tree);
+                }
+
+                permutation_next(&mut order)
+            } {}
+        }
+    }
+
+    #[test]
+    fn test_insert_in_order_remove_lower_bound() {
+        const LEN: usize = 128;
+
+        for i in 0..LEN {
+            let mut tree = RBTree::new();
+            let mut buckets = B::build(LEN);
+            buckets.iter_mut().for_each(|b| tree.insert(b));
+
+            for j in i..LEN {
+                let ptr = tree.remove_lower_bound(&i);
+                assert!(ptr == &mut buckets[j]);
+                check_tree(&tree);
+            }
+        }
+    }
+
+    #[test]
+    fn test_insert_rev_order_remove_lower_bound() {
+        const LEN: usize = 128;
+
+        for i in 0..LEN {
+            let mut tree = RBTree::new();
+            let mut buckets = B::build(LEN);
+            buckets.iter_mut().rev().for_each(|b| tree.insert(b));
+
+            for j in i..LEN {
+                let ptr = tree.remove_lower_bound(&i);
+                assert!(ptr == &mut buckets[j]);
+                check_tree(&tree);
+            }
+        }
+    }
+
+    #[test]
+    fn test_insert_alternate_order_remove_lower_bound() {
+        const LEN: usize = 128;
+
+        for i in 0..LEN {
+            let mut tree = RBTree::new();
+            let mut buckets = B::build(LEN);
+
+            let mut a = 0;
+            let mut b = LEN - 1;
+            while a < b {
+                tree.insert(&mut buckets[a]);
+                tree.insert(&mut buckets[b]);
+
+                a += 1;
+                b -= 1;
+            }
+
+            for j in i..LEN {
+                let ptr = tree.remove_lower_bound(&i);
+                assert!(ptr == &mut buckets[j]);
+                check_tree(&tree);
+            }
+        }
+    }
+
+    #[test]
+    fn test_permutation_find() {
+        const LEN: usize = 12;
+        let mut order: Vec<usize> = (0..LEN).collect();
+
+        while {
+            let mut tree = RBTree::new();
+            let mut buckets = B::build(LEN);
+            order.iter().for_each(|&i| tree.insert(&mut buckets[i]));
+
+            for i in 0..LEN {
+                let ptr = unsafe { tree.find(&i) };
+                assert!(ptr == &mut buckets[i]);
+            }
+
+            {
+                let ptr = unsafe { tree.find(&LEN) };
+                assert!(ptr.is_null());
+            }
+
+            permutation_next(&mut order)
+        } {}
+    }
+
+    #[test]
+    fn test_insert_in_order_find() {
+        const LEN: usize = 128;
+
+        let mut tree = RBTree::new();
+        let mut buckets = B::build(LEN);
+        buckets.iter_mut().for_each(|b| tree.insert(b));
+
+        for i in 0..LEN {
+            let ptr = unsafe { tree.find(&i) };
+            assert!(ptr == &mut buckets[i]);
+        }
+
+        {
+            let ptr = unsafe { tree.find(&LEN) };
+            assert!(ptr.is_null());
+        }
+    }
+
+    #[test]
+    fn test_insert_rev_order_find() {
+        const LEN: usize = 128;
+
+        let mut tree = RBTree::new();
+        let mut buckets = B::build(LEN);
+        buckets.iter_mut().rev().for_each(|b| tree.insert(b));
+
+        for i in 0..LEN {
+            let ptr = unsafe { tree.find(&i) };
+            assert!(ptr == &mut buckets[i]);
+        }
+
+        {
+            let ptr = unsafe { tree.find(&LEN) };
+            assert!(ptr.is_null());
+        }
+    }
+
+    #[test]
+    fn test_insert_alternate_find() {
+        const LEN: usize = 128;
+
+        let mut tree = RBTree::new();
+        let mut buckets = B::build(LEN);
+
+        let mut a = 0;
+        let mut b = LEN - 1;
+        while a < b {
+            tree.insert(&mut buckets[a]);
+            tree.insert(&mut buckets[b]);
+
+            a += 1;
+            b -= 1;
+        }
+
+        for i in 0..LEN {
+            let ptr = unsafe { tree.find(&i) };
+            assert!(ptr == &mut buckets[i]);
+        }
+
+        {
+            let ptr = unsafe { tree.find(&LEN) };
+            assert!(ptr.is_null());
         }
     }
 }
