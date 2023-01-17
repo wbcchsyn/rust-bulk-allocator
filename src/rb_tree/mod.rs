@@ -240,47 +240,16 @@ where
             }
 
             let root = &mut *self.root;
-            let (new_root, ret, _) = Self::iter_remove_lower_bound(root, key);
+            let (new_root, ret, _) = Self::iter_remove(root, key, |ret| {
+                if ret.1.is_null() && &*ret.0 > key {
+                    Self::remove_bucket(&mut *ret.0)
+                } else {
+                    ret
+                }
+            });
 
             self.root = new_root;
             self.root.as_mut().map(|root| root.set_color(Color::Black));
-            ret
-        }
-    }
-
-    unsafe fn iter_remove_lower_bound<K>(parent: &mut B, key: &K) -> (*mut B, *mut B, Balance)
-    where
-        B: PartialOrd<K>,
-    {
-        if (parent as &B) == key {
-            return Self::remove_bucket(parent);
-        }
-
-        let d = if (parent as &B) < key {
-            Direction::Right
-        } else {
-            Direction::Left
-        };
-
-        let ret: (*mut B, *mut B, Balance) = match parent.child(d).as_mut() {
-            None => (parent, null_mut(), Balance::Ok),
-            Some(child) => {
-                let (child, bucket, balance) = Self::iter_remove_lower_bound(child, key);
-                parent.set_child(child, d);
-
-                match balance {
-                    Balance::Bad => {
-                        let (parent, balance) = Self::remove_rotate(parent, (child, d));
-                        (parent, bucket, balance)
-                    }
-                    Balance::Ok => (parent, bucket, Balance::Ok),
-                }
-            }
-        };
-
-        if d == Direction::Left && ret.1.is_null() {
-            Self::remove_bucket(parent)
-        } else {
             ret
         }
     }
@@ -295,7 +264,7 @@ where
             }
 
             let root = &mut *self.root;
-            let (new_root, ret, _) = Self::iter_remove(root, key);
+            let (new_root, ret, _) = Self::iter_remove(root, key, |ret| ret);
 
             self.root = new_root;
             self.root.as_mut().map(|root| root.set_color(Color::Black));
@@ -303,9 +272,10 @@ where
         }
     }
 
-    unsafe fn iter_remove<K>(parent: &mut B, key: &K) -> (*mut B, *mut B, Balance)
+    unsafe fn iter_remove<K, F>(parent: &mut B, key: &K, f: F) -> (*mut B, *mut B, Balance)
     where
         B: PartialOrd<K>,
+        F: Copy + Fn((*mut B, *mut B, Balance)) -> (*mut B, *mut B, Balance),
     {
         if (parent as &B) == key {
             return Self::remove_bucket(parent);
@@ -317,10 +287,10 @@ where
             Direction::Left
         };
 
-        match parent.child(d).as_mut() {
-            None => return (parent, null_mut(), Balance::Ok),
+        let ret: (*mut B, *mut B, Balance) = match parent.child(d).as_mut() {
+            None => (parent, null_mut(), Balance::Ok),
             Some(child) => {
-                let (child, bucket, balance) = Self::iter_remove(child, key);
+                let (child, bucket, balance) = Self::iter_remove(child, key, f);
                 parent.set_child(child, d);
 
                 match balance {
@@ -331,7 +301,9 @@ where
                     Balance::Ok => (parent, bucket, Balance::Ok),
                 }
             }
-        }
+        };
+
+        f(ret)
     }
 
     unsafe fn remove_bucket(bucket: &mut B) -> (*mut B, *mut B, Balance) {
