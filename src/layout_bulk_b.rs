@@ -31,13 +31,14 @@
 
 // TODO: Finish this module and replace into layout_bulk_a
 
-use crate::{MemBlock, MEMORY_CHUNK_SIZE};
+use crate::MEMORY_CHUNK_SIZE;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::mem::{align_of, size_of};
-use std::ptr::null_mut;
+use std::ptr::{null_mut, NonNull};
 
-type PointerList = *mut u8;
+type Link<T> = Option<NonNull<T>>;
+type PointerList = Link<u8>;
 
 /// `UnsafeLayoutBulkAlloc` is an implementation of `GlobalAlloc`.
 /// It caches memory blocks to allocate. If the cache is empty, acquires a memory chunk from the
@@ -80,7 +81,7 @@ where
 {
     layout: Cell<Layout>, // Layout for u8 before initialized.
     to_free_list: Cell<PointerList>,
-    pools: Cell<*mut MemBlock>,
+    cache: Cell<Link<MemBlock>>,
     backend: B,
 }
 
@@ -91,7 +92,7 @@ where
     fn drop(&mut self) {
         let mut it = self.to_free_list.get();
 
-        if it.is_null() {
+        if it.is_none() {
             return;
         }
 
@@ -99,11 +100,10 @@ where
         let layout = Self::chunk_layout(self.layout.get());
         let offset = -1 * (layout.size() - size_of::<PointerList>()) as isize;
 
-        while !it.is_null() {
+        while let Some(ptr) = it {
             unsafe {
-                let ptr = it.offset(offset);
-                it = (*it.cast::<*mut PointerList>()).cast();
-                self.backend.dealloc(ptr, layout);
+                it = NonNull::new(*ptr.cast().as_mut());
+                self.backend.dealloc(ptr.as_ptr().offset(offset), layout);
             }
         }
     }
@@ -153,12 +153,12 @@ where
         } else {
             debug_assert_eq!(self.layout.get(), Self::block_layout(layout));
         }
-        self.do_alloc()
+        self.do_alloc().map(NonNull::as_ptr).unwrap_or(null_mut())
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
         debug_assert_eq!(Self::block_layout(_layout), self.layout.get());
-        self.do_dealloc(ptr);
+        self.do_dealloc(NonNull::new_unchecked(ptr));
     }
 }
 
@@ -170,75 +170,76 @@ where
     pub const fn new(backend: B) -> Self {
         Self {
             layout: Cell::new(Layout::new::<u8>()),
-            to_free_list: Cell::new(null_mut()),
-            pools: Cell::new(null_mut()),
+            to_free_list: Cell::new(None),
+            cache: Cell::new(None),
             backend,
         }
     }
 
-    unsafe fn do_alloc(&self) -> *mut u8 {
+    unsafe fn do_alloc(&self) -> Link<u8> {
         debug_assert!(self.is_initialized());
         let block_layout = self.layout.get();
 
-        if self.pools.get().is_null() {
-            // No memory is pooled.
-            // Acquire a memory chunk from backend and pools it at first.
+        if self.cache.get().is_none() {
+            // No memory is cached.
+            // Acquire a memory chunk from backend and cache it at first.
 
             let chunk_layout = Self::chunk_layout(block_layout);
-            let ptr = self.backend.alloc(chunk_layout);
-            if ptr.is_null() {
-                return null_mut();
-            }
+            let ptr = NonNull::new(self.backend.alloc(chunk_layout))?;
 
             // Take the end of the memory chunk as PointerList and append to self.to_free_list.
             {
                 let offset = chunk_layout.size() - size_of::<PointerList>();
-                let pointer_list = ptr.add(offset);
-                *pointer_list.cast() = self.to_free_list.get();
-                self.to_free_list.set(pointer_list);
+                let pointer_list = ptr.as_ptr().add(offset);
+                *pointer_list.cast() = self
+                    .to_free_list
+                    .get()
+                    .map(NonNull::as_ptr)
+                    .unwrap_or(null_mut());
+                self.to_free_list.set(NonNull::new(pointer_list));
             }
 
-            // Pool the rest of memory chunk
+            // Cache the rest of memory chunk
             {
-                debug_assert_eq!(ptr as usize % align_of::<MemBlock>(), 0);
-                let block = ptr.cast::<MemBlock>();
+                debug_assert_eq!(ptr.as_ptr() as usize % align_of::<MemBlock>(), 0);
+                let mut block = ptr.cast::<MemBlock>();
 
                 let len = chunk_layout.size() - size_of::<PointerList>();
                 debug_assert!(size_of::<MemBlock>() <= len);
 
-                (*block).next = null_mut();
-                (*block).len = chunk_layout.size() - size_of::<PointerList>();
+                block.as_mut().next = None;
+                block.as_mut().len = chunk_layout.size() - size_of::<PointerList>();
 
-                self.pools.set(block);
+                self.cache.set(Some(block));
             }
         }
 
-        let block = self.pools.get();
-        if 2 * block_layout.size() <= (*block).len {
+        let block = self.cache.get().unwrap();
+        if 2 * block_layout.size() <= (block.as_ref()).len {
             // Push back the rest of memory block.
-            let rest: *mut MemBlock = (block as *mut u8).add(block_layout.size()).cast();
+            let rest: *mut MemBlock = block.cast::<u8>().as_ptr().add(block_layout.size()).cast();
 
-            debug_assert!(size_of::<MemBlock>() <= (*block).len - block_layout.size());
+            debug_assert!(size_of::<MemBlock>() <= block.as_ref().len - block_layout.size());
             debug_assert_eq!(rest as usize % align_of::<MemBlock>(), 0);
 
-            (*rest).next = (*block).next;
-            (*rest).len = (*block).len - block_layout.size();
-            self.pools.set(rest);
+            (*rest).next = block.as_ref().next;
+            (*rest).len = block.as_ref().len - block_layout.size();
+            self.cache.set(NonNull::new(rest));
         } else {
-            self.pools.set((*block).next);
+            self.cache.set(block.as_ref().next);
         }
 
-        block.cast()
+        Some(block.cast())
     }
 
-    unsafe fn do_dealloc(&self, ptr: *mut u8) {
+    unsafe fn do_dealloc(&self, ptr: NonNull<u8>) {
         debug_assert!(self.is_initialized());
 
         let layout = self.layout.get();
-        let block: &mut MemBlock = &mut *ptr.cast();
-        block.next = self.pools.get();
+        let block: &mut MemBlock = ptr.cast().as_mut();
+        block.next = self.cache.get();
         block.len = layout.size();
-        self.pools.set(block);
+        self.cache.set(Some(block.into()));
     }
 
     fn is_initialized(&self) -> bool {
@@ -504,7 +505,7 @@ mod unsafe_layout_bulk_alloc_tests {
 
 /// `LayoutBulkAlloc` is an implementation of `GlobalAlloc`.
 ///
-/// This struct owns a memory pool to cache.
+/// This struct owns a cache for memory block.
 /// Method [`alloc`] checks whether the required `layout` fits to the cache or not.
 ///
 /// If the `layout` fits to the cache, [`alloc`] dispatches a memory block from the cache.
@@ -539,7 +540,10 @@ where
 {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if UnsafeLayoutBulkAlloc::<B>::block_layout(layout) == self.backend.layout.get() {
-            self.backend.do_alloc()
+            self.backend
+                .do_alloc()
+                .map(NonNull::as_ptr)
+                .unwrap_or(null_mut())
         } else {
             self.backend.backend.alloc(layout)
         }
@@ -547,7 +551,7 @@ where
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if UnsafeLayoutBulkAlloc::<B>::block_layout(layout) == self.backend.layout.get() {
-            self.backend.do_dealloc(ptr)
+            self.backend.do_dealloc(NonNull::new_unchecked(ptr))
         } else {
             self.backend.backend.dealloc(ptr, layout)
         }
@@ -695,4 +699,10 @@ mod layout_bulk_alloc_tests {
             }
         }
     }
+}
+
+struct MemBlock {
+    next: Link<Self>,
+    len: usize,
+    _pinned: std::marker::PhantomPinned,
 }
