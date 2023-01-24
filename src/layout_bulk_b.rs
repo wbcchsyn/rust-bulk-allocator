@@ -38,7 +38,7 @@ use std::mem::{align_of, size_of};
 use std::ptr::{null_mut, NonNull};
 
 type Link<T> = Option<NonNull<T>>;
-type PointerList = *mut u8;
+type PointerList = Link<u8>;
 
 /// `UnsafeLayoutBulkAlloc` is an implementation of `GlobalAlloc`.
 /// It caches memory blocks to allocate. If the cache is empty, acquires a memory chunk from the
@@ -92,7 +92,7 @@ where
     fn drop(&mut self) {
         let mut it = self.to_free_list.get();
 
-        if it.is_null() {
+        if it.is_none() {
             return;
         }
 
@@ -100,11 +100,10 @@ where
         let layout = Self::chunk_layout(self.layout.get());
         let offset = -1 * (layout.size() - size_of::<PointerList>()) as isize;
 
-        while !it.is_null() {
+        while let Some(ptr) = it {
             unsafe {
-                let ptr = it.offset(offset);
-                it = (*it.cast::<*mut PointerList>()).cast();
-                self.backend.dealloc(ptr, layout);
+                it = NonNull::new(*ptr.cast().as_mut());
+                self.backend.dealloc(ptr.as_ptr().offset(offset), layout);
             }
         }
     }
@@ -171,7 +170,7 @@ where
     pub const fn new(backend: B) -> Self {
         Self {
             layout: Cell::new(Layout::new::<u8>()),
-            to_free_list: Cell::new(null_mut()),
+            to_free_list: Cell::new(None),
             cache: Cell::new(null_mut()),
             backend,
         }
@@ -195,8 +194,12 @@ where
             {
                 let offset = chunk_layout.size() - size_of::<PointerList>();
                 let pointer_list = ptr.add(offset);
-                *pointer_list.cast() = self.to_free_list.get();
-                self.to_free_list.set(pointer_list);
+                *pointer_list.cast() = self
+                    .to_free_list
+                    .get()
+                    .map(NonNull::as_ptr)
+                    .unwrap_or(null_mut());
+                self.to_free_list.set(NonNull::new(pointer_list));
             }
 
             // Cache the rest of memory chunk
