@@ -2,7 +2,7 @@
 name = "bulk_allocator"
 version = "0.3.0"
 authors = ["Yoshida Shin <wbcchsyn@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 description = "Implementations for AllocRef. to pool allocated memory and to release them on the destruction."
 repository = "https://github.com/wbcchsyn/rust-bulk-allocator"
