@@ -158,7 +158,7 @@ where
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
         debug_assert_eq!(Self::block_layout(_layout), self.layout.get());
-        self.do_dealloc(ptr);
+        self.do_dealloc(NonNull::new_unchecked(ptr));
     }
 }
 
@@ -232,11 +232,11 @@ where
         Some(block.cast())
     }
 
-    unsafe fn do_dealloc(&self, ptr: *mut u8) {
+    unsafe fn do_dealloc(&self, ptr: NonNull<u8>) {
         debug_assert!(self.is_initialized());
 
         let layout = self.layout.get();
-        let block: &mut MemBlock = &mut *ptr.cast();
+        let block: &mut MemBlock = ptr.cast().as_mut();
         block.next = self.cache.get();
         block.len = layout.size();
         self.cache.set(Some(block.into()));
@@ -551,7 +551,7 @@ where
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if UnsafeLayoutBulkAlloc::<B>::block_layout(layout) == self.backend.layout.get() {
-            self.backend.do_dealloc(ptr)
+            self.backend.do_dealloc(NonNull::new_unchecked(ptr))
         } else {
             self.backend.backend.dealloc(ptr, layout)
         }
