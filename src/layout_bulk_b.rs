@@ -81,7 +81,7 @@ where
 {
     layout: Cell<Layout>, // Layout for u8 before initialized.
     to_free_list: Cell<PointerList>,
-    pools: Cell<*mut MemBlock>,
+    cache: Cell<*mut MemBlock>,
     backend: B,
 }
 
@@ -172,7 +172,7 @@ where
         Self {
             layout: Cell::new(Layout::new::<u8>()),
             to_free_list: Cell::new(null_mut()),
-            pools: Cell::new(null_mut()),
+            cache: Cell::new(null_mut()),
             backend,
         }
     }
@@ -181,9 +181,9 @@ where
         debug_assert!(self.is_initialized());
         let block_layout = self.layout.get();
 
-        if self.pools.get().is_null() {
-            // No memory is pooled.
-            // Acquire a memory chunk from backend and pools it at first.
+        if self.cache.get().is_null() {
+            // No memory is cached.
+            // Acquire a memory chunk from backend and cache it at first.
 
             let chunk_layout = Self::chunk_layout(block_layout);
             let ptr = self.backend.alloc(chunk_layout);
@@ -199,7 +199,7 @@ where
                 self.to_free_list.set(pointer_list);
             }
 
-            // Pool the rest of memory chunk
+            // Cache the rest of memory chunk
             {
                 debug_assert_eq!(ptr as usize % align_of::<MemBlock>(), 0);
                 let block = ptr.cast::<MemBlock>();
@@ -210,11 +210,11 @@ where
                 (*block).next = null_mut();
                 (*block).len = chunk_layout.size() - size_of::<PointerList>();
 
-                self.pools.set(block);
+                self.cache.set(block);
             }
         }
 
-        let block = self.pools.get();
+        let block = self.cache.get();
         if 2 * block_layout.size() <= (*block).len {
             // Push back the rest of memory block.
             let rest: *mut MemBlock = (block as *mut u8).add(block_layout.size()).cast();
@@ -224,9 +224,9 @@ where
 
             (*rest).next = (*block).next;
             (*rest).len = (*block).len - block_layout.size();
-            self.pools.set(rest);
+            self.cache.set(rest);
         } else {
-            self.pools.set((*block).next);
+            self.cache.set((*block).next);
         }
 
         block.cast()
@@ -237,9 +237,9 @@ where
 
         let layout = self.layout.get();
         let block: &mut MemBlock = &mut *ptr.cast();
-        block.next = self.pools.get();
+        block.next = self.cache.get();
         block.len = layout.size();
-        self.pools.set(block);
+        self.cache.set(block);
     }
 
     fn is_initialized(&self) -> bool {
@@ -505,7 +505,7 @@ mod unsafe_layout_bulk_alloc_tests {
 
 /// `LayoutBulkAlloc` is an implementation of `GlobalAlloc`.
 ///
-/// This struct owns a memory pool to cache.
+/// This struct owns a cache for memory block.
 /// Method [`alloc`] checks whether the required `layout` fits to the cache or not.
 ///
 /// If the `layout` fits to the cache, [`alloc`] dispatches a memory block from the cache.
