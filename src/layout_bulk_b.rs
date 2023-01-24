@@ -81,7 +81,7 @@ where
 {
     layout: Cell<Layout>, // Layout for u8 before initialized.
     to_free_list: Cell<PointerList>,
-    cache: Cell<*mut MemBlock>,
+    cache: Cell<Link<MemBlock>>,
     backend: B,
 }
 
@@ -171,7 +171,7 @@ where
         Self {
             layout: Cell::new(Layout::new::<u8>()),
             to_free_list: Cell::new(None),
-            cache: Cell::new(null_mut()),
+            cache: Cell::new(None),
             backend,
         }
     }
@@ -180,7 +180,7 @@ where
         debug_assert!(self.is_initialized());
         let block_layout = self.layout.get();
 
-        if self.cache.get().is_null() {
+        if self.cache.get().is_none() {
             // No memory is cached.
             // Acquire a memory chunk from backend and cache it at first.
 
@@ -210,29 +210,29 @@ where
                 let len = chunk_layout.size() - size_of::<PointerList>();
                 debug_assert!(size_of::<MemBlock>() <= len);
 
-                (*block).next = null_mut();
+                (*block).next = None;
                 (*block).len = chunk_layout.size() - size_of::<PointerList>();
 
-                self.cache.set(block);
+                self.cache.set(NonNull::new(block));
             }
         }
 
-        let block = self.cache.get();
-        if 2 * block_layout.size() <= (*block).len {
+        let block = self.cache.get().unwrap();
+        if 2 * block_layout.size() <= (block.as_ref()).len {
             // Push back the rest of memory block.
-            let rest: *mut MemBlock = (block as *mut u8).add(block_layout.size()).cast();
+            let rest: *mut MemBlock = block.cast::<u8>().as_ptr().add(block_layout.size()).cast();
 
-            debug_assert!(size_of::<MemBlock>() <= (*block).len - block_layout.size());
+            debug_assert!(size_of::<MemBlock>() <= block.as_ref().len - block_layout.size());
             debug_assert_eq!(rest as usize % align_of::<MemBlock>(), 0);
 
-            (*rest).next = (*block).next;
-            (*rest).len = (*block).len - block_layout.size();
-            self.cache.set(rest);
+            (*rest).next = block.as_ref().next;
+            (*rest).len = block.as_ref().len - block_layout.size();
+            self.cache.set(NonNull::new(rest));
         } else {
-            self.cache.set((*block).next);
+            self.cache.set(block.as_ref().next);
         }
 
-        block.cast()
+        block.as_ptr().cast()
     }
 
     unsafe fn do_dealloc(&self, ptr: *mut u8) {
@@ -242,7 +242,7 @@ where
         let block: &mut MemBlock = &mut *ptr.cast();
         block.next = self.cache.get();
         block.len = layout.size();
-        self.cache.set(block);
+        self.cache.set(Some(block.into()));
     }
 
     fn is_initialized(&self) -> bool {
@@ -702,7 +702,7 @@ mod layout_bulk_alloc_tests {
 }
 
 struct MemBlock {
-    next: *mut Self,
+    next: Link<Self>,
     len: usize,
     _pinned: std::marker::PhantomPinned,
 }
