@@ -31,7 +31,7 @@
 
 // TODO: Finish this module and replace into layout_bulk_a
 
-use crate::{MemBlock, MEMORY_CHUNK_SIZE};
+use crate::MEMORY_CHUNK_SIZE;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::mem::{align_of, size_of};
@@ -695,4 +695,10 @@ mod layout_bulk_alloc_tests {
             }
         }
     }
+}
+
+struct MemBlock {
+    next: *mut Self,
+    len: usize,
+    _pinned: std::marker::PhantomPinned,
 }
