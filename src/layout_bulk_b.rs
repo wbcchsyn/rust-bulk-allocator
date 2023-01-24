@@ -153,7 +153,7 @@ where
         } else {
             debug_assert_eq!(self.layout.get(), Self::block_layout(layout));
         }
-        self.do_alloc()
+        self.do_alloc().map(NonNull::as_ptr).unwrap_or(null_mut())
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
@@ -176,7 +176,7 @@ where
         }
     }
 
-    unsafe fn do_alloc(&self) -> *mut u8 {
+    unsafe fn do_alloc(&self) -> Link<u8> {
         debug_assert!(self.is_initialized());
         let block_layout = self.layout.get();
 
@@ -185,15 +185,12 @@ where
             // Acquire a memory chunk from backend and cache it at first.
 
             let chunk_layout = Self::chunk_layout(block_layout);
-            let ptr = self.backend.alloc(chunk_layout);
-            if ptr.is_null() {
-                return null_mut();
-            }
+            let ptr = NonNull::new(self.backend.alloc(chunk_layout))?;
 
             // Take the end of the memory chunk as PointerList and append to self.to_free_list.
             {
                 let offset = chunk_layout.size() - size_of::<PointerList>();
-                let pointer_list = ptr.add(offset);
+                let pointer_list = ptr.as_ptr().add(offset);
                 *pointer_list.cast() = self
                     .to_free_list
                     .get()
@@ -204,16 +201,16 @@ where
 
             // Cache the rest of memory chunk
             {
-                debug_assert_eq!(ptr as usize % align_of::<MemBlock>(), 0);
-                let block = ptr.cast::<MemBlock>();
+                debug_assert_eq!(ptr.as_ptr() as usize % align_of::<MemBlock>(), 0);
+                let mut block = ptr.cast::<MemBlock>();
 
                 let len = chunk_layout.size() - size_of::<PointerList>();
                 debug_assert!(size_of::<MemBlock>() <= len);
 
-                (*block).next = None;
-                (*block).len = chunk_layout.size() - size_of::<PointerList>();
+                block.as_mut().next = None;
+                block.as_mut().len = chunk_layout.size() - size_of::<PointerList>();
 
-                self.cache.set(NonNull::new(block));
+                self.cache.set(Some(block));
             }
         }
 
@@ -232,7 +229,7 @@ where
             self.cache.set(block.as_ref().next);
         }
 
-        block.as_ptr().cast()
+        Some(block.cast())
     }
 
     unsafe fn do_dealloc(&self, ptr: *mut u8) {
@@ -543,7 +540,10 @@ where
 {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if UnsafeLayoutBulkAlloc::<B>::block_layout(layout) == self.backend.layout.get() {
-            self.backend.do_alloc()
+            self.backend
+                .do_alloc()
+                .map(NonNull::as_ptr)
+                .unwrap_or(null_mut())
         } else {
             self.backend.backend.alloc(layout)
         }
