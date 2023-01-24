@@ -35,8 +35,9 @@ use crate::MEMORY_CHUNK_SIZE;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::mem::{align_of, size_of};
-use std::ptr::null_mut;
+use std::ptr::{null_mut, NonNull};
 
+type Link<T> = Option<NonNull<T>>;
 type PointerList = *mut u8;
 
 /// `UnsafeLayoutBulkAlloc` is an implementation of `GlobalAlloc`.
