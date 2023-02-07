@@ -110,7 +110,7 @@ where
     /// # Safety
     ///
     /// The caller must not update where the return value points to change the order.
-    pub unsafe fn find<K>(&self, key: &K) -> *mut B
+    pub unsafe fn find<K>(&self, key: &K) -> Link<B>
     where
         B: PartialOrd<K>,
     {
@@ -119,12 +119,12 @@ where
         while let Some(bucket) = it.map(|ptr| ptr.as_ref()) {
             match bucket.partial_cmp(key).unwrap() {
                 Ordering::Less => it = NonNull::new(bucket.right()),
-                Ordering::Equal => return it.map(NonNull::as_ptr).unwrap_or(null_mut()),
+                Ordering::Equal => return it,
                 Ordering::Greater => it = NonNull::new(bucket.left()),
             }
         }
 
-        null_mut()
+        None
     }
 
     pub fn insert(&mut self, bucket: &mut B)
@@ -1004,12 +1004,12 @@ mod tests {
 
             for i in 0..LEN {
                 let ptr = unsafe { tree.find(&i) };
-                assert!(ptr == &mut buckets[i]);
+                assert!(ptr == NonNull::new(&mut buckets[i]));
             }
 
             {
                 let ptr = unsafe { tree.find(&LEN) };
-                assert!(ptr.is_null());
+                assert!(ptr.is_none());
             }
 
             permutation_next(&mut order)
@@ -1026,12 +1026,12 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = unsafe { tree.find(&i) };
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
         }
 
         {
             let ptr = unsafe { tree.find(&LEN) };
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
         }
     }
 
@@ -1045,12 +1045,12 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = unsafe { tree.find(&i) };
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
         }
 
         {
             let ptr = unsafe { tree.find(&LEN) };
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
         }
     }
 
@@ -1073,12 +1073,12 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = unsafe { tree.find(&i) };
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
         }
 
         {
             let ptr = unsafe { tree.find(&LEN) };
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
         }
     }
 }
