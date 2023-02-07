@@ -93,3 +93,9 @@ impl Ord for SizeBucket {
         }
     }
 }
+
+impl PartialOrd<usize> for SizeBucket {
+    fn partial_cmp(&self, other: &usize) -> Option<Ordering> {
+        self.size().partial_cmp(other)
+    }
+}
