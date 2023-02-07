@@ -239,18 +239,19 @@ where
         unsafe {
             let root = self.root.map(|mut ptr| ptr.as_mut())?;
 
-            let (new_root, ret, _) = Self::iter_remove(root, key, |ret| {
-                if ret.1.is_null() && &*ret.0 > key {
-                    Self::remove_bucket(&mut *ret.0)
+            let (new_root, ret, _) = Self::iter_remove(root, key, |mut ret| {
+                if ret.1.is_none() && ret.0.unwrap().as_ref() > key {
+                    let (new_root, ret, balance) = Self::remove_bucket(ret.0.unwrap().as_mut());
+                    (NonNull::new(new_root), NonNull::new(ret), balance)
                 } else {
                     ret
                 }
             });
 
-            self.root = NonNull::new(new_root);
+            self.root = new_root;
             self.root
                 .map(|mut root| root.as_mut().set_color(Color::Black));
-            NonNull::new(ret)
+            ret
         }
     }
 
@@ -262,21 +263,22 @@ where
             let root = self.root.map(|mut ptr| ptr.as_mut())?;
             let (new_root, ret, _) = Self::iter_remove(root, key, |ret| ret);
 
-            self.root = NonNull::new(new_root);
+            self.root = new_root;
             self.root
                 .map(|mut root| root.as_mut().set_color(Color::Black));
 
-            NonNull::new(ret)
+            ret
         }
     }
 
-    unsafe fn iter_remove<K, F>(parent: &mut B, key: &K, f: F) -> (*mut B, *mut B, Balance)
+    unsafe fn iter_remove<K, F>(parent: &mut B, key: &K, f: F) -> (Link<B>, Link<B>, Balance)
     where
         B: PartialOrd<K>,
-        F: Copy + Fn((*mut B, *mut B, Balance)) -> (*mut B, *mut B, Balance),
+        F: Copy + Fn((Link<B>, Link<B>, Balance)) -> (Link<B>, Link<B>, Balance),
     {
         if (parent as &B) == key {
-            return Self::remove_bucket(parent);
+            let (new_parent, popped, balance) = Self::remove_bucket(parent);
+            return (NonNull::new(new_parent), NonNull::new(popped), balance);
         }
 
         let d = if (parent as &B) < key {
@@ -285,18 +287,19 @@ where
             Direction::Left
         };
 
-        let ret: (*mut B, *mut B, Balance) = match parent.child(d).as_mut() {
-            None => (parent, null_mut(), Balance::Ok),
+        let ret: (Link<B>, Link<B>, Balance) = match parent.child(d).as_mut() {
+            None => (NonNull::new(parent), None, Balance::Ok),
             Some(child) => {
                 let (child, bucket, balance) = Self::iter_remove(child, key, f);
+                let child = child.map(NonNull::as_ptr).unwrap_or(null_mut());
                 parent.set_child(child, d);
 
                 match balance {
                     Balance::Bad => {
                         let (parent, balance) = Self::remove_rotate(parent, (child, d));
-                        (parent, bucket, balance)
+                        (NonNull::new(parent), bucket, balance)
                     }
-                    Balance::Ok => (parent, bucket, Balance::Ok),
+                    Balance::Ok => (NonNull::new(parent), bucket, Balance::Ok),
                 }
             }
         };
