@@ -30,7 +30,9 @@
 // limitations under the License.
 
 use std::cmp::Ordering;
-use std::ptr::null_mut;
+use std::ptr::{null_mut, NonNull};
+
+type Link<B> = Option<NonNull<B>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
@@ -92,12 +94,12 @@ impl From<bool> for Balance {
 }
 
 pub struct RBTree<B> {
-    root: *mut B,
+    root: Link<B>,
 }
 
 impl<B> RBTree<B> {
     pub fn new() -> Self {
-        Self { root: null_mut() }
+        Self { root: None }
     }
 }
 
@@ -114,11 +116,11 @@ where
     {
         let mut it = self.root;
 
-        while let Some(bucket) = it.as_ref() {
+        while let Some(bucket) = it.map(|ptr| ptr.as_ref()) {
             match bucket.partial_cmp(key).unwrap() {
-                Ordering::Less => it = bucket.right(),
-                Ordering::Equal => return it,
-                Ordering::Greater => it = bucket.left(),
+                Ordering::Less => it = NonNull::new(bucket.right()),
+                Ordering::Equal => return it.map(NonNull::as_ptr).unwrap_or(null_mut()),
+                Ordering::Greater => it = NonNull::new(bucket.left()),
             }
         }
 
@@ -133,10 +135,10 @@ where
         debug_assert!(bucket.child(Direction::Left) == null_mut());
         debug_assert!(bucket.child(Direction::Right) == null_mut());
 
-        match unsafe { self.root.as_mut() } {
+        match unsafe { self.root.map(|mut ptr| ptr.as_mut()) } {
             None => {
                 bucket.set_color(Color::Black);
-                self.root = bucket;
+                self.root = NonNull::new(bucket);
             }
             Some(root) => {
                 let d = if bucket < root {
@@ -149,7 +151,7 @@ where
                     None => root.set_child(bucket, d),
                     Some(child) => {
                         let (new_root, _) = Self::iter_insert(root, (child, d), bucket);
-                        self.root = new_root;
+                        self.root = NonNull::new(new_root);
                         new_root.set_color(Color::Black);
                     }
                 }
@@ -235,11 +237,11 @@ where
         B: PartialOrd<K>,
     {
         unsafe {
-            if self.root.is_null() {
+            if self.root.is_none() {
                 return null_mut();
             }
 
-            let root = &mut *self.root;
+            let root = self.root.unwrap().as_mut();
             let (new_root, ret, _) = Self::iter_remove(root, key, |ret| {
                 if ret.1.is_null() && &*ret.0 > key {
                     Self::remove_bucket(&mut *ret.0)
@@ -248,8 +250,9 @@ where
                 }
             });
 
-            self.root = new_root;
-            self.root.as_mut().map(|root| root.set_color(Color::Black));
+            self.root = NonNull::new(new_root);
+            self.root
+                .map(|mut root| root.as_mut().set_color(Color::Black));
             ret
         }
     }
@@ -259,15 +262,16 @@ where
         B: PartialOrd<K>,
     {
         unsafe {
-            if self.root.is_null() {
+            if self.root.is_none() {
                 return null_mut();
             }
 
-            let root = &mut *self.root;
+            let root = self.root.unwrap().as_mut();
             let (new_root, ret, _) = Self::iter_remove(root, key, |ret| ret);
 
-            self.root = new_root;
-            self.root.as_mut().map(|root| root.set_color(Color::Black));
+            self.root = NonNull::new(new_root);
+            self.root
+                .map(|mut root| root.as_mut().set_color(Color::Black));
             ret
         }
     }
@@ -502,11 +506,11 @@ mod tests {
 
     fn check_tree(tree: &RBTree<B>) {
         unsafe {
-            if tree.root.is_null() {
+            if tree.root.is_none() {
                 return;
             }
 
-            let root = &*tree.root;
+            let root = tree.root.unwrap().as_ref();
             assert!(root.color() == Color::Black);
 
             check_black_count(root);
