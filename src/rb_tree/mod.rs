@@ -314,7 +314,8 @@ where
                 )
             }
             Some(right) => {
-                let (new_bucket, balance) = Self::pop_min(bucket, (right, Direction::Right));
+                let (new_right, new_bucket, balance) = Self::pop_min(right);
+                bucket.set_right(new_right);
                 let new_bucket = &mut *new_bucket;
 
                 new_bucket.set_left(bucket.left());
@@ -333,22 +334,26 @@ where
         }
     }
 
-    unsafe fn pop_min(g_parent: &mut B, parent: (&mut B, Direction)) -> (*mut B, Balance) {
-        match parent.0.left().as_mut() {
-            None => {
-                g_parent.set_child(parent.0.right(), parent.1);
-                (parent.0, Balance::from(parent.0.color() == Color::Red))
-            }
-            Some(child) => match Self::pop_min(parent.0, (child, Direction::Left)) {
-                (popped, Balance::Bad) => {
-                    let (new_parent, balance) =
-                        Self::remove_rotate(parent.0, (child, Direction::Left));
-                    g_parent.set_child(new_parent, parent.1);
+    unsafe fn pop_min(parent: &mut B) -> (*mut B, *mut B, Balance) {
+        match parent.left().as_mut() {
+            None => (
+                parent.right(),
+                parent,
+                Balance::from(parent.color() == Color::Red),
+            ),
+            Some(child) => {
+                let (new_child, popped, balance) = Self::pop_min(child);
+                parent.set_left(new_child);
 
-                    (popped, balance)
+                match balance {
+                    Balance::Ok => (parent, popped, Balance::Ok),
+                    Balance::Bad => {
+                        let (new_parent, balance) =
+                            Self::remove_rotate(parent, (new_child, Direction::Left));
+                        (new_parent, popped, balance)
+                    }
                 }
-                ret => ret,
-            },
+            }
         }
     }
 
