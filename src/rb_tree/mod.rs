@@ -314,9 +314,9 @@ where
                 return (NonNull::new(bucket.left()), NonNull::from(bucket), balance);
             }
             Some(right) => {
-                let (new_right, new_bucket, balance) = Self::pop_min(right);
-                bucket.set_right(new_right);
-                let new_bucket = &mut *new_bucket;
+                let (new_right, mut new_bucket, balance) = Self::pop_min(right);
+                bucket.set_right(new_right.map(NonNull::as_ptr).unwrap_or(null_mut()));
+                let new_bucket = new_bucket.as_mut();
 
                 new_bucket.set_left(bucket.left());
                 new_bucket.set_right(bucket.right());
@@ -334,23 +334,27 @@ where
         }
     }
 
-    unsafe fn pop_min(parent: &mut B) -> (*mut B, *mut B, Balance) {
+    unsafe fn pop_min(parent: &mut B) -> (Link<B>, NonNull<B>, Balance) {
         match parent.left().as_mut() {
-            None => (
-                parent.right(),
-                parent,
-                Balance::from(parent.color() == Color::Red),
-            ),
+            None => {
+                let balance = Balance::from(parent.color() == Color::Red);
+                (NonNull::new(parent.right()), NonNull::from(parent), balance)
+            }
             Some(child) => {
                 let (new_child, popped, balance) = Self::pop_min(child);
-                parent.set_left(new_child);
+                parent.set_left(new_child.map(NonNull::as_ptr).unwrap_or(null_mut()));
 
                 match balance {
-                    Balance::Ok => (parent, popped, Balance::Ok),
+                    Balance::Ok => (NonNull::new(parent), popped, Balance::Ok),
                     Balance::Bad => {
-                        let (new_parent, balance) =
-                            Self::remove_rotate(parent, (new_child, Direction::Left));
-                        (new_parent, popped, balance)
+                        let (new_parent, balance) = Self::remove_rotate(
+                            parent,
+                            (
+                                new_child.map(NonNull::as_ptr).unwrap_or(null_mut()),
+                                Direction::Left,
+                            ),
+                        );
+                        (NonNull::new(new_parent), popped, balance)
                     }
                 }
             }
