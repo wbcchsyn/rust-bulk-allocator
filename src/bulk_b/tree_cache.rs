@@ -30,6 +30,7 @@
 // limitations under the License.
 
 use crate::rb_tree::Color;
+use std::cmp::Ordering;
 use std::ptr::NonNull;
 
 type Link<T> = Option<NonNull<T>>;
@@ -66,5 +67,17 @@ impl Eq for SizeBucket {}
 impl PartialEq<usize> for SizeBucket {
     fn eq(&self, other: &usize) -> bool {
         self.size() == *other
+    }
+}
+
+impl PartialOrd<Self> for SizeBucket {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.0.size == other.0.size {
+            let this: *const SizeBucket = self;
+            let other: *const SizeBucket = other;
+            this.partial_cmp(&other)
+        } else {
+            self.0.size.partial_cmp(&other.0.size)
+        }
     }
 }
