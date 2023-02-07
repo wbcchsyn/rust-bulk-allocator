@@ -54,3 +54,5 @@ impl PartialEq<Self> for SizeBucket {
         this == other
     }
 }
+
+impl Eq for SizeBucket {}
