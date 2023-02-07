@@ -30,7 +30,9 @@
 // limitations under the License.
 
 use std::cmp::Ordering;
-use std::ptr::null_mut;
+use std::ptr::NonNull;
+
+type Link<B> = Option<NonNull<B>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
@@ -39,23 +41,23 @@ pub enum Color {
 }
 
 pub trait Bucket {
-    fn child(&self, direction: Direction) -> *mut Self;
-    fn set_child(&mut self, child: *mut Self, direction: Direction);
+    fn child(&self, direction: Direction) -> Link<Self>;
+    fn set_child(&mut self, child: Link<Self>, direction: Direction);
 
     fn color(&self) -> Color;
     fn set_color(&mut self, color: Color);
 
-    fn left(&self) -> *mut Self {
+    fn left(&self) -> Link<Self> {
         self.child(Direction::Left)
     }
-    fn set_left(&mut self, child: *mut Self) {
+    fn set_left(&mut self, child: Link<Self>) {
         self.set_child(child, Direction::Left)
     }
 
-    fn right(&self) -> *mut Self {
+    fn right(&self) -> Link<Self> {
         self.child(Direction::Right)
     }
-    fn set_right(&mut self, child: *mut Self) {
+    fn set_right(&mut self, child: Link<Self>) {
         self.set_child(child, Direction::Right)
     }
 }
@@ -92,12 +94,12 @@ impl From<bool> for Balance {
 }
 
 pub struct RBTree<B> {
-    root: *mut B,
+    root: Link<B>,
 }
 
 impl<B> RBTree<B> {
     pub fn new() -> Self {
-        Self { root: null_mut() }
+        Self { root: None }
     }
 }
 
@@ -108,13 +110,13 @@ where
     /// # Safety
     ///
     /// The caller must not update where the return value points to change the order.
-    pub unsafe fn find<K>(&self, key: &K) -> *mut B
+    pub unsafe fn find<K>(&self, key: &K) -> Link<B>
     where
         B: PartialOrd<K>,
     {
         let mut it = self.root;
 
-        while let Some(bucket) = it.as_ref() {
+        while let Some(bucket) = it.map(|ptr| ptr.as_ref()) {
             match bucket.partial_cmp(key).unwrap() {
                 Ordering::Less => it = bucket.right(),
                 Ordering::Equal => return it,
@@ -122,7 +124,7 @@ where
             }
         }
 
-        null_mut()
+        None
     }
 
     pub fn insert(&mut self, bucket: &mut B)
@@ -130,13 +132,13 @@ where
         B: Ord,
     {
         debug_assert!(bucket.color() == Color::Red);
-        debug_assert!(bucket.child(Direction::Left) == null_mut());
-        debug_assert!(bucket.child(Direction::Right) == null_mut());
+        debug_assert!(bucket.child(Direction::Left) == None);
+        debug_assert!(bucket.child(Direction::Right) == None);
 
-        match unsafe { self.root.as_mut() } {
+        match unsafe { self.root.map(|mut ptr| ptr.as_mut()) } {
             None => {
                 bucket.set_color(Color::Black);
-                self.root = bucket;
+                self.root = NonNull::new(bucket);
             }
             Some(root) => {
                 let d = if bucket < root {
@@ -145,12 +147,15 @@ where
                     Direction::Right
                 };
 
-                match unsafe { root.child(d).as_mut() } {
-                    None => root.set_child(bucket, d),
-                    Some(child) => {
-                        let (new_root, _) = Self::iter_insert(root, (child, d), bucket);
-                        self.root = new_root;
-                        new_root.set_color(Color::Black);
+                unsafe {
+                    match root.child(d) {
+                        None => root.set_child(NonNull::new(bucket), d),
+                        Some(mut child) => {
+                            let (new_root, _) =
+                                Self::iter_insert(root, (child.as_mut(), d), bucket);
+                            self.root = NonNull::new(new_root);
+                            new_root.set_color(Color::Black);
+                        }
                     }
                 }
             }
@@ -171,34 +176,37 @@ where
             Direction::Right
         };
 
-        match unsafe { parent.0.child(d).as_mut() } {
-            None => {
-                parent.0.set_child(bucket, d);
-                match parent.0.color() {
-                    Color::Black => (g_parent, None),
-                    Color::Red => {
-                        let new_parent = Self::insert_rotate(g_parent, parent, (bucket, d));
-                        (new_parent, None)
-                    }
-                }
-            }
-            Some(child) => {
-                let (new_parent, child) = Self::iter_insert(parent.0, (child, d), bucket);
-                g_parent.set_child(new_parent, parent.1);
-                let parent = (new_parent, parent.1);
-
-                // If both parent and child are red, rotate.
-                match child {
-                    None => {
-                        if g_parent.color() == Color::Red && parent.0.color() == Color::Red {
-                            (g_parent, Some(parent))
-                        } else {
-                            (g_parent, None)
+        unsafe {
+            match parent.0.child(d) {
+                None => {
+                    parent.0.set_child(NonNull::new(bucket), d);
+                    match parent.0.color() {
+                        Color::Black => (g_parent, None),
+                        Color::Red => {
+                            let new_parent = Self::insert_rotate(g_parent, parent, (bucket, d));
+                            (new_parent, None)
                         }
                     }
-                    Some(child) => {
-                        let g_parent = Self::insert_rotate(g_parent, parent, child);
-                        (g_parent, None)
+                }
+                Some(mut child) => {
+                    let (new_parent, child) =
+                        Self::iter_insert(parent.0, (child.as_mut(), d), bucket);
+                    g_parent.set_child(NonNull::new(new_parent), parent.1);
+                    let parent = (new_parent, parent.1);
+
+                    // If both parent and child are red, rotate.
+                    match child {
+                        None => {
+                            if g_parent.color() == Color::Red && parent.0.color() == Color::Red {
+                                (g_parent, Some(parent))
+                            } else {
+                                (g_parent, None)
+                            }
+                        }
+                        Some(child) => {
+                            let g_parent = Self::insert_rotate(g_parent, parent, child);
+                            (g_parent, None)
+                        }
                     }
                 }
             }
@@ -217,68 +225,66 @@ where
         if parent.1 == child.1 {
             let d = parent.1;
             g_parent.set_child(parent.0.child(d.alter()), d);
-            parent.0.set_child(g_parent, d.alter());
+            parent.0.set_child(NonNull::new(g_parent), d.alter());
             child.0.set_color(Color::Black);
             parent.0
         } else {
             g_parent.set_child(child.0.child(child.1), parent.1);
             parent.0.set_child(child.0.child(parent.1), child.1);
-            child.0.set_child(parent.0, parent.1);
-            child.0.set_child(g_parent, child.1);
+            child.0.set_child(NonNull::new(parent.0), parent.1);
+            child.0.set_child(NonNull::new(g_parent), child.1);
             parent.0.set_color(Color::Black);
             child.0
         }
     }
 
-    pub fn remove_lower_bound<K>(&mut self, key: &K) -> *mut B
+    pub fn remove_lower_bound<K>(&mut self, key: &K) -> Link<B>
     where
         B: PartialOrd<K>,
     {
         unsafe {
-            if self.root.is_null() {
-                return null_mut();
-            }
+            let root = self.root.map(|mut ptr| ptr.as_mut())?;
 
-            let root = &mut *self.root;
-            let (new_root, ret, _) = Self::iter_remove(root, key, |ret| {
-                if ret.1.is_null() && &*ret.0 > key {
-                    Self::remove_bucket(&mut *ret.0)
+            let (new_root, ret, _) = Self::iter_remove(root, key, |mut ret| {
+                if ret.1.is_none() && ret.0.unwrap().as_ref() > key {
+                    let (new_root, ret, balance) = Self::remove_bucket(ret.0.unwrap().as_mut());
+                    (new_root, Some(ret), balance)
                 } else {
                     ret
                 }
             });
 
             self.root = new_root;
-            self.root.as_mut().map(|root| root.set_color(Color::Black));
+            self.root
+                .map(|mut root| root.as_mut().set_color(Color::Black));
             ret
         }
     }
 
-    pub fn remove<K>(&mut self, key: &K) -> *mut B
+    pub fn remove<K>(&mut self, key: &K) -> Link<B>
     where
         B: PartialOrd<K>,
     {
         unsafe {
-            if self.root.is_null() {
-                return null_mut();
-            }
-
-            let root = &mut *self.root;
+            let root = self.root.map(|mut ptr| ptr.as_mut())?;
             let (new_root, ret, _) = Self::iter_remove(root, key, |ret| ret);
 
             self.root = new_root;
-            self.root.as_mut().map(|root| root.set_color(Color::Black));
+            self.root
+                .map(|mut root| root.as_mut().set_color(Color::Black));
+
             ret
         }
     }
 
-    unsafe fn iter_remove<K, F>(parent: &mut B, key: &K, f: F) -> (*mut B, *mut B, Balance)
+    unsafe fn iter_remove<K, F>(parent: &mut B, key: &K, f: F) -> (Link<B>, Link<B>, Balance)
     where
         B: PartialOrd<K>,
-        F: Copy + Fn((*mut B, *mut B, Balance)) -> (*mut B, *mut B, Balance),
+        F: Copy + Fn((Link<B>, Link<B>, Balance)) -> (Link<B>, Link<B>, Balance),
     {
         if (parent as &B) == key {
-            return Self::remove_bucket(parent);
+            let (new_parent, popped, balance) = Self::remove_bucket(parent);
+            return (new_parent, Some(popped), balance);
         }
 
         let d = if (parent as &B) < key {
@@ -287,18 +293,18 @@ where
             Direction::Left
         };
 
-        let ret: (*mut B, *mut B, Balance) = match parent.child(d).as_mut() {
-            None => (parent, null_mut(), Balance::Ok),
-            Some(child) => {
-                let (child, bucket, balance) = Self::iter_remove(child, key, f);
+        let ret: (Link<B>, Link<B>, Balance) = match parent.child(d) {
+            None => (NonNull::new(parent), None, Balance::Ok),
+            Some(mut child) => {
+                let (child, bucket, balance) = Self::iter_remove(child.as_mut(), key, f);
                 parent.set_child(child, d);
 
                 match balance {
                     Balance::Bad => {
                         let (parent, balance) = Self::remove_rotate(parent, (child, d));
-                        (parent, bucket, balance)
+                        (NonNull::new(parent), bucket, balance)
                     }
-                    Balance::Ok => (parent, bucket, Balance::Ok),
+                    Balance::Ok => (NonNull::new(parent), bucket, Balance::Ok),
                 }
             }
         };
@@ -306,75 +312,76 @@ where
         f(ret)
     }
 
-    unsafe fn remove_bucket(bucket: &mut B) -> (*mut B, *mut B, Balance) {
-        match bucket.right().as_mut() {
+    unsafe fn remove_bucket(bucket: &mut B) -> (Link<B>, NonNull<B>, Balance) {
+        match bucket.right() {
             None => {
-                return (
-                    bucket.left(),
-                    bucket,
-                    Balance::from(bucket.color() == Color::Red),
-                )
+                let balance = Balance::from(bucket.color() == Color::Red);
+                return (bucket.left(), NonNull::from(bucket), balance);
             }
-            Some(right) => {
-                let (new_bucket, balance) = Self::pop_min(bucket, (right, Direction::Right));
-                let new_bucket = &mut *new_bucket;
+            Some(mut right) => {
+                let (new_right, mut new_bucket, balance) = Self::pop_min(right.as_mut());
+                bucket.set_right(new_right);
+                let new_bucket = new_bucket.as_mut();
 
                 new_bucket.set_left(bucket.left());
                 new_bucket.set_right(bucket.right());
                 new_bucket.set_color(bucket.color());
 
                 match balance {
-                    Balance::Ok => (new_bucket, bucket, Balance::Ok),
+                    Balance::Ok => (NonNull::new(new_bucket), NonNull::from(bucket), Balance::Ok),
                     Balance::Bad => {
                         let (new_bucket, balance) =
-                            Self::remove_rotate(new_bucket, (right, Direction::Right));
-                        (new_bucket, bucket, balance)
+                            Self::remove_rotate(new_bucket, (Some(right), Direction::Right));
+                        (NonNull::new(new_bucket), NonNull::from(bucket), balance)
                     }
                 }
             }
         }
     }
 
-    unsafe fn pop_min(g_parent: &mut B, parent: (&mut B, Direction)) -> (*mut B, Balance) {
-        match parent.0.left().as_mut() {
+    unsafe fn pop_min(parent: &mut B) -> (Link<B>, NonNull<B>, Balance) {
+        match parent.left().as_mut() {
             None => {
-                g_parent.set_child(parent.0.right(), parent.1);
-                (parent.0, Balance::from(parent.0.color() == Color::Red))
+                let balance = Balance::from(parent.color() == Color::Red);
+                (parent.right(), NonNull::from(parent), balance)
             }
-            Some(child) => match Self::pop_min(parent.0, (child, Direction::Left)) {
-                (popped, Balance::Bad) => {
-                    let (new_parent, balance) =
-                        Self::remove_rotate(parent.0, (child, Direction::Left));
-                    g_parent.set_child(new_parent, parent.1);
+            Some(child) => {
+                let (new_child, popped, balance) = Self::pop_min(child.as_mut());
+                parent.set_left(new_child);
 
-                    (popped, balance)
+                match balance {
+                    Balance::Ok => (NonNull::new(parent), popped, Balance::Ok),
+                    Balance::Bad => {
+                        let (new_parent, balance) =
+                            Self::remove_rotate(parent, (new_child, Direction::Left));
+                        (NonNull::new(new_parent), popped, balance)
+                    }
                 }
-                ret => ret,
-            },
+            }
         }
     }
 
     unsafe fn remove_rotate<'a>(
         parent: &'a mut B,
-        lacking: (*mut B, Direction),
+        lacking: (Link<B>, Direction),
     ) -> (&'a mut B, Balance) {
         let brother = {
             let d = lacking.1.alter();
-            debug_assert_eq!(parent.child(d).is_null(), false);
-            (&mut *parent.child(d), d)
+            debug_assert_eq!(parent.child(d).is_none(), false);
+            (parent.child(d).unwrap().as_mut(), d)
         };
 
         match brother.0.color() {
             Color::Red => {
                 parent.set_child(brother.0.child(lacking.1), brother.1);
-                brother.0.set_child(parent, lacking.1);
+                brother.0.set_child(NonNull::new(parent), lacking.1);
 
                 parent.set_color(Color::Red);
                 brother.0.set_color(Color::Black);
 
                 let (new_lacking, _balance) = Self::remove_rotate(parent, lacking);
                 debug_assert_eq!(_balance, Balance::Ok);
-                brother.0.set_child(new_lacking, lacking.1);
+                brother.0.set_child(NonNull::new(new_lacking), lacking.1);
 
                 (brother.0, Balance::Ok)
             }
@@ -382,22 +389,22 @@ where
                 let straight_nephew = brother.0.child(brother.1);
                 let alter_nephew = brother.0.child(lacking.1);
 
-                if straight_nephew.as_ref().map(Bucket::color) == Some(Color::Red) {
+                if straight_nephew.map(|ptr| Bucket::color(ptr.as_ref())) == Some(Color::Red) {
                     parent.set_child(alter_nephew, brother.1);
-                    brother.0.set_child(parent, lacking.1);
+                    brother.0.set_child(NonNull::new(parent), lacking.1);
 
-                    (*straight_nephew).set_color(Color::Black);
+                    straight_nephew.map(|mut ptr| ptr.as_mut().set_color(Color::Black));
                     brother.0.set_color(parent.color());
                     parent.set_color(Color::Black);
 
                     (brother.0, Balance::Ok)
-                } else if alter_nephew.as_ref().map(Bucket::color) == Some(Color::Red) {
-                    let nephew = &mut *alter_nephew;
+                } else if alter_nephew.map(|ptr| Bucket::color(ptr.as_ref())) == Some(Color::Red) {
+                    let nephew = alter_nephew.unwrap().as_mut();
                     parent.set_child(nephew.child(lacking.1), brother.1);
                     brother.0.set_child(nephew.child(brother.1), lacking.1);
 
-                    nephew.set_child(parent, lacking.1);
-                    nephew.set_child(brother.0, brother.1);
+                    nephew.set_child(NonNull::new(parent), lacking.1);
+                    nephew.set_child(NonNull::new(brother.0), brother.1);
 
                     nephew.set_color(parent.color());
                     parent.set_color(Color::Black);
@@ -420,8 +427,8 @@ mod tests {
     use std::cmp::Ordering;
 
     struct B {
-        left_: *mut Self,
-        right_: *mut Self,
+        left_: Link<Self>,
+        right_: Link<Self>,
         color_: Color,
         v: usize,
     }
@@ -435,8 +442,8 @@ mod tests {
 
                 for i in 0..n {
                     let b = &mut ret[i];
-                    b.left_ = null_mut();
-                    b.right_ = null_mut();
+                    b.left_ = None;
+                    b.right_ = None;
                     b.color_ = Color::Red;
                     b.v = i
                 }
@@ -447,13 +454,13 @@ mod tests {
     }
 
     impl Bucket for B {
-        fn child(&self, direction: Direction) -> *mut Self {
+        fn child(&self, direction: Direction) -> Link<Self> {
             match direction {
                 Direction::Left => self.left_,
                 Direction::Right => self.right_,
             }
         }
-        fn set_child(&mut self, child: *mut Self, direction: Direction) {
+        fn set_child(&mut self, child: Link<Self>, direction: Direction) {
             match direction {
                 Direction::Left => self.left_ = child,
                 Direction::Right => self.right_ = child,
@@ -502,11 +509,11 @@ mod tests {
 
     fn check_tree(tree: &RBTree<B>) {
         unsafe {
-            if tree.root.is_null() {
+            if tree.root.is_none() {
                 return;
             }
 
-            let root = &*tree.root;
+            let root = tree.root.unwrap().as_ref();
             assert!(root.color() == Color::Black);
 
             check_black_count(root);
@@ -516,27 +523,21 @@ mod tests {
     }
 
     unsafe fn check_black_count(b: &B) -> usize {
-        let left = b
-            .child(Direction::Left)
-            .as_ref()
-            .map_or(0, |c| check_black_count(c));
-        let right = b
-            .child(Direction::Right)
-            .as_ref()
-            .map_or(0, |c| check_black_count(c));
+        let left = b.left().map_or(0, |ptr| check_black_count(ptr.as_ref()));
+        let right = b.right().map_or(0, |ptr| check_black_count(ptr.as_ref()));
 
         assert_eq!(left, right);
         left + (b.color() == Color::Black) as usize
     }
 
     unsafe fn check_not_red_red(b: &B) {
-        if let Some(left) = b.child(Direction::Left).as_ref() {
+        if let Some(left) = b.child(Direction::Left).map(|ptr| ptr.as_ref()) {
             if b.color() == Color::Red {
                 assert_eq!(left.color(), Color::Black);
             }
             check_not_red_red(left);
         }
-        if let Some(right) = b.child(Direction::Right).as_ref() {
+        if let Some(right) = b.child(Direction::Right).map(|ptr| ptr.as_ref()) {
             if b.color() == Color::Red {
                 assert_eq!(right.color(), Color::Black);
             }
@@ -545,11 +546,11 @@ mod tests {
     }
 
     unsafe fn check_order(b: &B) {
-        if let Some(left) = b.child(Direction::Left).as_ref() {
+        if let Some(left) = b.child(Direction::Left).map(|ptr| ptr.as_ref()) {
             assert!(left <= b);
             check_order(left);
         }
-        if let Some(right) = b.child(Direction::Right).as_ref() {
+        if let Some(right) = b.child(Direction::Right).map(|ptr| ptr.as_ref()) {
             assert!(b <= right);
             check_order(right);
         }
@@ -654,10 +655,10 @@ mod tests {
 
                 for &i in remove_order.iter() {
                     let ptr = tree.remove(&i);
-                    assert!(ptr == &mut buckets[i]);
+                    assert!(ptr == NonNull::new(&mut buckets[i]));
 
                     let ptr = tree.remove(&i);
-                    assert!(ptr.is_null());
+                    assert!(ptr.is_none());
 
                     check_tree(&tree);
                 }
@@ -679,10 +680,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -698,10 +699,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -719,18 +720,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == &mut buckets[a]);
+            assert!(ptr == NonNull::new(&mut buckets[a]));
 
             let ptr = tree.remove(&a);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == &mut buckets[b]);
+            assert!(ptr == NonNull::new(&mut buckets[b]));
 
             let ptr = tree.remove(&b);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
@@ -749,10 +750,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -768,10 +769,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -789,18 +790,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == &mut buckets[a]);
+            assert!(ptr == NonNull::new(&mut buckets[a]));
 
             let ptr = tree.remove(&a);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == &mut buckets[b]);
+            assert!(ptr == NonNull::new(&mut buckets[b]));
 
             let ptr = tree.remove(&b);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
@@ -828,10 +829,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -856,10 +857,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -886,18 +887,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == &mut buckets[a]);
+            assert!(ptr == NonNull::new(&mut buckets[a]));
 
             let ptr = tree.remove(&a);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == &mut buckets[b]);
+            assert!(ptr == NonNull::new(&mut buckets[b]));
 
             let ptr = tree.remove(&b);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
@@ -919,7 +920,7 @@ mod tests {
 
                 for j in i..LEN {
                     let ptr = tree.remove_lower_bound(&i);
-                    assert!(ptr == &mut buckets[j]);
+                    assert!(ptr == NonNull::new(&mut buckets[j]));
                     check_tree(&tree);
                 }
 
@@ -939,7 +940,7 @@ mod tests {
 
             for j in i..LEN {
                 let ptr = tree.remove_lower_bound(&i);
-                assert!(ptr == &mut buckets[j]);
+                assert!(ptr == NonNull::new(&mut buckets[j]));
                 check_tree(&tree);
             }
         }
@@ -956,7 +957,7 @@ mod tests {
 
             for j in i..LEN {
                 let ptr = tree.remove_lower_bound(&i);
-                assert!(ptr == &mut buckets[j]);
+                assert!(ptr == NonNull::new(&mut buckets[j]));
                 check_tree(&tree);
             }
         }
@@ -982,7 +983,7 @@ mod tests {
 
             for j in i..LEN {
                 let ptr = tree.remove_lower_bound(&i);
-                assert!(ptr == &mut buckets[j]);
+                assert!(ptr == NonNull::new(&mut buckets[j]));
                 check_tree(&tree);
             }
         }
@@ -1000,12 +1001,12 @@ mod tests {
 
             for i in 0..LEN {
                 let ptr = unsafe { tree.find(&i) };
-                assert!(ptr == &mut buckets[i]);
+                assert!(ptr == NonNull::new(&mut buckets[i]));
             }
 
             {
                 let ptr = unsafe { tree.find(&LEN) };
-                assert!(ptr.is_null());
+                assert!(ptr.is_none());
             }
 
             permutation_next(&mut order)
@@ -1022,12 +1023,12 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = unsafe { tree.find(&i) };
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
         }
 
         {
             let ptr = unsafe { tree.find(&LEN) };
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
         }
     }
 
@@ -1041,12 +1042,12 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = unsafe { tree.find(&i) };
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
         }
 
         {
             let ptr = unsafe { tree.find(&LEN) };
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
         }
     }
 
@@ -1069,12 +1070,12 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = unsafe { tree.find(&i) };
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
         }
 
         {
             let ptr = unsafe { tree.find(&LEN) };
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
         }
     }
 }
