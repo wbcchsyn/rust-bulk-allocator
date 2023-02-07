@@ -47,3 +47,10 @@ struct Bucket {
 }
 
 struct SizeBucket(Bucket);
+
+impl PartialEq<Self> for SizeBucket {
+    fn eq(&self, other: &Self) -> bool {
+        let this: *const SizeBucket = self;
+        this == other
+    }
+}
