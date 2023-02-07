@@ -28,3 +28,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+use crate::rb_tree::Color;
+use std::ptr::NonNull;
+
+type Link<T> = Option<NonNull<T>>;
+
+struct Bucket {
+    left_order: Link<Self>,
+    right_order: Link<Self>,
+
+    left_size: Link<Self>,
+    right_size: Link<Self>,
+
+    size: u16,
+    order_color: Color,
+    size_color: Color,
+}
