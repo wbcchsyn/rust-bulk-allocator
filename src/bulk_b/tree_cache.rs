@@ -81,3 +81,15 @@ impl PartialOrd<Self> for SizeBucket {
         }
     }
 }
+
+impl Ord for SizeBucket {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.0.size == other.0.size {
+            let this: *const SizeBucket = self;
+            let other: *const SizeBucket = other;
+            this.cmp(&other)
+        } else {
+            self.0.size.cmp(&other.0.size)
+        }
+    }
+}
