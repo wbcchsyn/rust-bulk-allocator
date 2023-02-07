@@ -242,7 +242,7 @@ where
             let (new_root, ret, _) = Self::iter_remove(root, key, |mut ret| {
                 if ret.1.is_none() && ret.0.unwrap().as_ref() > key {
                     let (new_root, ret, balance) = Self::remove_bucket(ret.0.unwrap().as_mut());
-                    (NonNull::new(new_root), NonNull::new(ret), balance)
+                    (new_root, Some(ret), balance)
                 } else {
                     ret
                 }
@@ -278,7 +278,7 @@ where
     {
         if (parent as &B) == key {
             let (new_parent, popped, balance) = Self::remove_bucket(parent);
-            return (NonNull::new(new_parent), NonNull::new(popped), balance);
+            return (new_parent, Some(popped), balance);
         }
 
         let d = if (parent as &B) < key {
@@ -307,14 +307,11 @@ where
         f(ret)
     }
 
-    unsafe fn remove_bucket(bucket: &mut B) -> (*mut B, *mut B, Balance) {
+    unsafe fn remove_bucket(bucket: &mut B) -> (Link<B>, NonNull<B>, Balance) {
         match bucket.right().as_mut() {
             None => {
-                return (
-                    bucket.left(),
-                    bucket,
-                    Balance::from(bucket.color() == Color::Red),
-                )
+                let balance = Balance::from(bucket.color() == Color::Red);
+                return (NonNull::new(bucket.left()), NonNull::from(bucket), balance);
             }
             Some(right) => {
                 let (new_right, new_bucket, balance) = Self::pop_min(right);
@@ -326,11 +323,11 @@ where
                 new_bucket.set_color(bucket.color());
 
                 match balance {
-                    Balance::Ok => (new_bucket, bucket, Balance::Ok),
+                    Balance::Ok => (NonNull::new(new_bucket), NonNull::from(bucket), Balance::Ok),
                     Balance::Bad => {
                         let (new_bucket, balance) =
                             Self::remove_rotate(new_bucket, (right, Direction::Right));
-                        (new_bucket, bucket, balance)
+                        (NonNull::new(new_bucket), NonNull::from(bucket), balance)
                     }
                 }
             }
