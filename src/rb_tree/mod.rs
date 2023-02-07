@@ -291,8 +291,7 @@ where
             None => (NonNull::new(parent), None, Balance::Ok),
             Some(child) => {
                 let (child, bucket, balance) = Self::iter_remove(child, key, f);
-                let child = child.map(NonNull::as_ptr).unwrap_or(null_mut());
-                parent.set_child(child, d);
+                parent.set_child(child.map(NonNull::as_ptr).unwrap_or(null_mut()), d);
 
                 match balance {
                     Balance::Bad => {
@@ -325,8 +324,10 @@ where
                 match balance {
                     Balance::Ok => (NonNull::new(new_bucket), NonNull::from(bucket), Balance::Ok),
                     Balance::Bad => {
-                        let (new_bucket, balance) =
-                            Self::remove_rotate(new_bucket, (right, Direction::Right));
+                        let (new_bucket, balance) = Self::remove_rotate(
+                            new_bucket,
+                            (NonNull::new(right), Direction::Right),
+                        );
                         (NonNull::new(new_bucket), NonNull::from(bucket), balance)
                     }
                 }
@@ -347,13 +348,8 @@ where
                 match balance {
                     Balance::Ok => (NonNull::new(parent), popped, Balance::Ok),
                     Balance::Bad => {
-                        let (new_parent, balance) = Self::remove_rotate(
-                            parent,
-                            (
-                                new_child.map(NonNull::as_ptr).unwrap_or(null_mut()),
-                                Direction::Left,
-                            ),
-                        );
+                        let (new_parent, balance) =
+                            Self::remove_rotate(parent, (new_child, Direction::Left));
                         (NonNull::new(new_parent), popped, balance)
                     }
                 }
@@ -363,7 +359,7 @@ where
 
     unsafe fn remove_rotate<'a>(
         parent: &'a mut B,
-        lacking: (*mut B, Direction),
+        lacking: (Link<B>, Direction),
     ) -> (&'a mut B, Balance) {
         let brother = {
             let d = lacking.1.alter();
