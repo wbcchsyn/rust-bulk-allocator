@@ -45,3 +45,5 @@ struct Bucket {
     order_color: Color,
     size_color: Color,
 }
+
+struct SizeBucket(Bucket);
