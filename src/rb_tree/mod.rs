@@ -254,22 +254,19 @@ where
         }
     }
 
-    pub fn remove<K>(&mut self, key: &K) -> *mut B
+    pub fn remove<K>(&mut self, key: &K) -> Link<B>
     where
         B: PartialOrd<K>,
     {
         unsafe {
-            if self.root.is_none() {
-                return null_mut();
-            }
-
-            let root = self.root.unwrap().as_mut();
+            let root = self.root.map(|mut ptr| ptr.as_mut())?;
             let (new_root, ret, _) = Self::iter_remove(root, key, |ret| ret);
 
             self.root = NonNull::new(new_root);
             self.root
                 .map(|mut root| root.as_mut().set_color(Color::Black));
-            ret
+
+            NonNull::new(ret)
         }
     }
 
@@ -655,10 +652,10 @@ mod tests {
 
                 for &i in remove_order.iter() {
                     let ptr = tree.remove(&i);
-                    assert!(ptr == &mut buckets[i]);
+                    assert!(ptr == NonNull::new(&mut buckets[i]));
 
                     let ptr = tree.remove(&i);
-                    assert!(ptr.is_null());
+                    assert!(ptr.is_none());
 
                     check_tree(&tree);
                 }
@@ -680,10 +677,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -699,10 +696,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -720,18 +717,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == &mut buckets[a]);
+            assert!(ptr == NonNull::new(&mut buckets[a]));
 
             let ptr = tree.remove(&a);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == &mut buckets[b]);
+            assert!(ptr == NonNull::new(&mut buckets[b]));
 
             let ptr = tree.remove(&b);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
@@ -750,10 +747,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -769,10 +766,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -790,18 +787,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == &mut buckets[a]);
+            assert!(ptr == NonNull::new(&mut buckets[a]));
 
             let ptr = tree.remove(&a);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == &mut buckets[b]);
+            assert!(ptr == NonNull::new(&mut buckets[b]));
 
             let ptr = tree.remove(&b);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
@@ -829,10 +826,10 @@ mod tests {
 
         for i in 0..LEN {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -857,10 +854,10 @@ mod tests {
 
         for i in (0..LEN).rev() {
             let ptr = tree.remove(&i);
-            assert!(ptr == &mut buckets[i]);
+            assert!(ptr == NonNull::new(&mut buckets[i]));
 
             let ptr = tree.remove(&i);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
         }
@@ -887,18 +884,18 @@ mod tests {
         let mut b = LEN - 1;
         while a < b {
             let ptr = tree.remove(&a);
-            assert!(ptr == &mut buckets[a]);
+            assert!(ptr == NonNull::new(&mut buckets[a]));
 
             let ptr = tree.remove(&a);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
             let ptr = tree.remove(&b);
-            assert!(ptr == &mut buckets[b]);
+            assert!(ptr == NonNull::new(&mut buckets[b]));
 
             let ptr = tree.remove(&b);
-            assert!(ptr.is_null());
+            assert!(ptr.is_none());
 
             check_tree(&tree);
 
