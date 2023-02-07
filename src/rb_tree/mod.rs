@@ -232,16 +232,13 @@ where
         }
     }
 
-    pub fn remove_lower_bound<K>(&mut self, key: &K) -> *mut B
+    pub fn remove_lower_bound<K>(&mut self, key: &K) -> Link<B>
     where
         B: PartialOrd<K>,
     {
         unsafe {
-            if self.root.is_none() {
-                return null_mut();
-            }
+            let root = self.root.map(|mut ptr| ptr.as_mut())?;
 
-            let root = self.root.unwrap().as_mut();
             let (new_root, ret, _) = Self::iter_remove(root, key, |ret| {
                 if ret.1.is_null() && &*ret.0 > key {
                     Self::remove_bucket(&mut *ret.0)
@@ -253,7 +250,7 @@ where
             self.root = NonNull::new(new_root);
             self.root
                 .map(|mut root| root.as_mut().set_color(Color::Black));
-            ret
+            NonNull::new(ret)
         }
     }
 
@@ -923,7 +920,7 @@ mod tests {
 
                 for j in i..LEN {
                     let ptr = tree.remove_lower_bound(&i);
-                    assert!(ptr == &mut buckets[j]);
+                    assert!(ptr == NonNull::new(&mut buckets[j]));
                     check_tree(&tree);
                 }
 
@@ -943,7 +940,7 @@ mod tests {
 
             for j in i..LEN {
                 let ptr = tree.remove_lower_bound(&i);
-                assert!(ptr == &mut buckets[j]);
+                assert!(ptr == NonNull::new(&mut buckets[j]));
                 check_tree(&tree);
             }
         }
@@ -960,7 +957,7 @@ mod tests {
 
             for j in i..LEN {
                 let ptr = tree.remove_lower_bound(&i);
-                assert!(ptr == &mut buckets[j]);
+                assert!(ptr == NonNull::new(&mut buckets[j]));
                 check_tree(&tree);
             }
         }
@@ -986,7 +983,7 @@ mod tests {
 
             for j in i..LEN {
                 let ptr = tree.remove_lower_bound(&i);
-                assert!(ptr == &mut buckets[j]);
+                assert!(ptr == NonNull::new(&mut buckets[j]));
                 check_tree(&tree);
             }
         }
