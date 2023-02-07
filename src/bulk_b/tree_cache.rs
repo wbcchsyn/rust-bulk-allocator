@@ -62,3 +62,9 @@ impl PartialEq<Self> for SizeBucket {
 }
 
 impl Eq for SizeBucket {}
+
+impl PartialEq<usize> for SizeBucket {
+    fn eq(&self, other: &usize) -> bool {
+        self.size() == *other
+    }
+}
