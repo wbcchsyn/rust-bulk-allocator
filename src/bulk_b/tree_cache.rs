@@ -125,3 +125,9 @@ impl TreeBucket for SizeBucket {
 }
 
 struct OrderBucket(Bucket);
+
+impl PartialEq<Self> for OrderBucket {
+    fn eq(&self, other: &Self) -> bool {
+        self as *const Self == other
+    }
+}
