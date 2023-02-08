@@ -156,3 +156,11 @@ impl PartialOrd<Self> for OrderBucket {
         this.partial_cmp(&other)
     }
 }
+
+impl Ord for OrderBucket {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let this: *const Self = self;
+        let other: *const Self = other;
+        this.cmp(&other)
+    }
+}
