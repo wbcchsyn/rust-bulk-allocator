@@ -138,6 +138,15 @@ impl TreeBucket for SizeBucket {
 struct OrderBucket(Bucket);
 
 impl OrderBucket {
+    pub fn init(ptr: NonNull<u8>, _size: usize) {
+        debug_assert!(size_of::<Self>() <= _size);
+        debug_assert!(_size <= u16::MAX as usize);
+        debug_assert!(_size % ALIGN == 0);
+
+        let _this: &mut Self = unsafe { ptr.cast().as_mut() };
+        debug_assert!(_this.size() == _size);
+    }
+
     pub fn size(&self) -> usize {
         self.0.size as usize
     }
