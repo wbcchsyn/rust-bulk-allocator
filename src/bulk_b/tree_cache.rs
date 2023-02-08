@@ -29,7 +29,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::rb_tree::{Color, Direction, TreeBucket};
+use crate::rb_tree::{Color, Direction, RBTree, TreeBucket};
 use std::cmp::Ordering;
 use std::ptr::NonNull;
 
@@ -199,4 +199,9 @@ impl TreeBucket for OrderBucket {
     fn set_color(&mut self, color: Color) {
         self.0.order_color = color
     }
+}
+
+pub struct TreeCache {
+    size_tree: RBTree<SizeBucket>,
+    order_tree: RBTree<OrderBucket>,
 }
