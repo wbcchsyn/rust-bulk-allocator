@@ -48,6 +48,12 @@ struct Bucket {
 
 struct SizeBucket(Bucket);
 
+impl SizeBucket {
+    pub fn size(&self) -> usize {
+        self.0.size as usize
+    }
+}
+
 impl PartialEq<Self> for SizeBucket {
     fn eq(&self, other: &Self) -> bool {
         let this: *const SizeBucket = self;
