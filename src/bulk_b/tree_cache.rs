@@ -49,6 +49,8 @@ struct Bucket {
     size_color: Color,
 }
 
+impl Bucket {}
+
 struct SizeBucket(Bucket);
 
 impl SizeBucket {
@@ -259,6 +261,271 @@ impl TreeCache {
         Self {
             size_tree: RBTree::new(),
             order_tree: RBTree::new(),
+        }
+    }
+
+    /// Does nothing and returns `false` if `size` is too small to cache; otherwise, caches ptr
+    /// and returns `true`.
+    pub fn dealloc(&mut self, ptr: NonNull<u8>, size: usize) -> bool {
+        debug_assert!(ptr.as_ptr() as usize % ALIGN == 0);
+        debug_assert!(size % ALIGN == 0);
+
+        // If the next memory block is cached, pop the block and merge to ptr.
+        let size = unsafe {
+            let next_ptr = NonNull::new_unchecked(ptr.as_ptr().add(size));
+            match self.order_tree.remove(&next_ptr) {
+                None => size,
+                Some(ptr) => {
+                    // The next block was cached.
+                    // Remove from the size_tree as well.
+                    let size_bucket: &SizeBucket = ptr.cast().as_ref();
+                    self.size_tree.remove(size_bucket);
+
+                    size + size_bucket.size()
+                }
+            }
+        };
+
+        // If the previous memory block is cached, enlarge the size to merge to ptr;
+        // otherwise, store ptr into the cache.
+        unsafe {
+            let prev_ptr = NonNull::new_unchecked(ptr.as_ptr().offset(-1));
+            match self.order_tree.find(&prev_ptr) {
+                None => {
+                    // Do nothing and return false if the size is too small.
+                    if size < size_of::<Bucket>() {
+                        return false;
+                    }
+
+                    SizeBucket::init(ptr, size);
+                    self.size_tree.insert(ptr.cast().as_mut());
+
+                    OrderBucket::init(ptr, size);
+                    self.order_tree.insert(ptr.cast().as_mut());
+                }
+                Some(prev_ptr) => {
+                    let order_bucket = prev_ptr.as_ref();
+                    let size = size + order_bucket.size();
+
+                    // Changeng size affect to the size_tree.
+                    // Remove from size_tree, change the size, and insert into size_tree again.
+                    let size_bucket: &mut SizeBucket = prev_ptr.cast().as_mut();
+                    self.size_tree.remove(size_bucket);
+                    SizeBucket::init(prev_ptr.cast(), size);
+                    self.size_tree.insert(size_bucket);
+
+                    // Do nothing for order_tree, because changing the size does not matter to it.
+                }
+            }
+        }
+
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dealloc_merge() {
+        unsafe {
+            let mut buckets: Vec<Bucket> = Vec::with_capacity(5);
+            buckets.set_len(5);
+
+            let mut cache = TreeCache::new();
+            let size = size_of::<Bucket>();
+
+            // dealloc the first block
+            {
+                cache.dealloc(NonNull::from(&mut buckets[0]).cast(), size);
+
+                let size_ptr = cache.size_tree.find(&buckets[0]);
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                let order_ptr = cache.order_tree.find(&buckets[0]);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                for i in 1..5 {
+                    assert!(cache.size_tree.find(&buckets[i]).is_none());
+                    assert!(cache.order_tree.find(&buckets[i]).is_none());
+                }
+            }
+
+            // dealloc the last block
+            {
+                cache.dealloc(NonNull::from(&mut buckets[4]).cast(), size);
+
+                let size_ptr = cache.size_tree.find(&buckets[0]);
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                let order_ptr = cache.order_tree.find(&buckets[0]);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                let size_ptr = cache.size_tree.find(&buckets[4]);
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                let order_ptr = cache.order_tree.find(&buckets[4]);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                for i in 1..4 {
+                    assert!(cache.size_tree.find(&buckets[i]).is_none());
+                    assert!(cache.order_tree.find(&buckets[i]).is_none());
+                }
+            }
+
+            // dealloc the 2nd block
+            // The 1st and the 2nd blocks are merged.
+            {
+                cache.dealloc(NonNull::from(&mut buckets[1]).cast(), size);
+
+                let size_ptr = cache.size_tree.find(&buckets[0]);
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == 2 * size_of::<Bucket>());
+
+                let order_ptr = cache.order_tree.find(&buckets[0]);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == 2 * size_of::<Bucket>());
+
+                let size_ptr = cache.size_tree.find(&buckets[4]);
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                let order_ptr = cache.order_tree.find(&buckets[4]);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                for i in 2..4 {
+                    assert!(cache.size_tree.find(&buckets[i]).is_none());
+                    assert!(cache.order_tree.find(&buckets[i]).is_none());
+                }
+            }
+
+            // dealloc the 4th block
+            // The 4th and the last blocks are merged.
+            {
+                cache.dealloc(NonNull::from(&mut buckets[3]).cast(), size);
+
+                let size_ptr = cache.size_tree.find(&buckets[0]);
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == 2 * size_of::<Bucket>());
+
+                let order_ptr = cache.order_tree.find(&buckets[0]);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == 2 * size_of::<Bucket>());
+
+                let size_ptr = cache.size_tree.find(&buckets[3]);
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == 2 * size_of::<Bucket>());
+
+                let order_ptr = cache.order_tree.find(&buckets[3]);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == 2 * size_of::<Bucket>());
+
+                for i in 2..3 {
+                    assert!(cache.size_tree.find(&buckets[i]).is_none());
+                    assert!(cache.order_tree.find(&buckets[i]).is_none());
+                }
+            }
+
+            // dealloc the 3rd block
+            // All the blocks are merged.
+            {
+                cache.dealloc(NonNull::from(&mut buckets[2]).cast(), size);
+
+                let size_ptr = cache.size_tree.find(&buckets[0]);
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == 5 * size_of::<Bucket>());
+
+                let order_ptr = cache.order_tree.find(&buckets[0]);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == 5 * size_of::<Bucket>());
+
+                for i in 1..5 {
+                    assert!(cache.size_tree.find(&buckets[i]).is_none());
+                    assert!(cache.order_tree.find(&buckets[i]).is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_dealloc_small_merge() {
+        unsafe {
+            let mut buckets: Vec<Bucket> = Vec::with_capacity(3);
+            buckets.set_len(3);
+
+            let mut cache = TreeCache::new();
+            let size = size_of::<Bucket>();
+
+            // dealloc the 2nd block
+            {
+                assert!(cache.dealloc(NonNull::from(&mut buckets[1]).cast(), size));
+
+                let size_ptr = cache.size_tree.find(&buckets[1]);
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                let order_ptr = cache.order_tree.find(&buckets[1]);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == size_of::<Bucket>());
+
+                for i in [0, 2] {
+                    assert!(cache.size_tree.find(&buckets[i]).is_none());
+                    assert!(cache.order_tree.find(&buckets[i]).is_none());
+                }
+            }
+
+            // Try to dealloc the first ALIGN bytes and fail.
+            {
+                assert!(cache.dealloc(NonNull::from(&mut buckets[0]).cast(), ALIGN) == false);
+
+                for i in [0, 2] {
+                    assert!(cache.size_tree.find(&buckets[i]).is_none());
+                    assert!(cache.order_tree.find(&buckets[i]).is_none());
+                }
+            }
+
+            // Dealloc the last ALIGN bytes of buckets[0]
+            {
+                let ptr: *mut u8 = (&mut buckets[1] as *mut Bucket).cast();
+                let ptr = NonNull::new(ptr.offset(-1 * ALIGN as isize)).unwrap();
+                assert!(cache.dealloc(ptr, ALIGN) == true);
+
+                let size_ptr = cache.size_tree.find(&(size_of::<Bucket>() + ALIGN));
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == size_of::<Bucket>() + ALIGN);
+
+                let order_ptr = cache.order_tree.find(&ptr);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == size_of::<Bucket>() + ALIGN);
+
+                for i in [0, 2] {
+                    assert!(cache.size_tree.find(&buckets[i]).is_none());
+                    assert!(cache.order_tree.find(&buckets[i]).is_none());
+                }
+            }
+
+            // Dealloc the first ALIGN bytes of buckets[2]
+            {
+                assert!(cache.dealloc(NonNull::from(&mut buckets[2]).cast(), ALIGN) == true);
+
+                let size_ptr = cache.size_tree.find(&(size_of::<Bucket>() + 2 * ALIGN));
+                assert!(size_ptr.is_some());
+                assert!(size_ptr.unwrap().as_ref().size() == size_of::<Bucket>() + 2 * ALIGN);
+
+                let ptr: *mut u8 = (&mut buckets[1] as *mut Bucket).cast();
+                let ptr = NonNull::new(ptr.offset(-1 * ALIGN as isize)).unwrap();
+                let order_ptr = cache.order_tree.find(&ptr);
+                assert!(order_ptr.is_some());
+                assert!(order_ptr.unwrap().as_ref().size() == size_of::<Bucket>() + 2 * ALIGN);
+            }
         }
     }
 }
