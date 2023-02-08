@@ -123,3 +123,5 @@ impl TreeBucket for SizeBucket {
         self.0.size_color = color
     }
 }
+
+struct OrderBucket(Bucket);
