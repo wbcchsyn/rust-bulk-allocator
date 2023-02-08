@@ -131,3 +131,5 @@ impl PartialEq<Self> for OrderBucket {
         self as *const Self == other
     }
 }
+
+impl Eq for OrderBucket {}
