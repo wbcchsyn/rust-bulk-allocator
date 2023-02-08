@@ -29,7 +29,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::rb_tree::Color;
+use crate::rb_tree::{Color, Direction, TreeBucket};
 use std::cmp::Ordering;
 use std::ptr::NonNull;
 
@@ -97,5 +97,29 @@ impl Ord for SizeBucket {
 impl PartialOrd<usize> for SizeBucket {
     fn partial_cmp(&self, other: &usize) -> Option<Ordering> {
         self.size().partial_cmp(other)
+    }
+}
+
+impl TreeBucket for SizeBucket {
+    fn child(&self, direction: Direction) -> Link<Self> {
+        match direction {
+            Direction::Left => self.0.left_size.map(NonNull::cast),
+            Direction::Right => self.0.right_size.map(NonNull::cast),
+        }
+    }
+
+    fn set_child(&mut self, child: Link<Self>, direction: Direction) {
+        match direction {
+            Direction::Left => self.0.left_size = child.map(NonNull::cast),
+            Direction::Right => self.0.right_size = child.map(NonNull::cast),
+        }
+    }
+
+    fn color(&self) -> Color {
+        self.0.size_color
+    }
+
+    fn set_color(&mut self, color: Color) {
+        self.0.size_color = color
     }
 }
