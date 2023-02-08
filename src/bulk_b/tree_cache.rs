@@ -205,3 +205,12 @@ pub struct TreeCache {
     size_tree: RBTree<SizeBucket>,
     order_tree: RBTree<OrderBucket>,
 }
+
+impl TreeCache {
+    pub const fn new() -> Self {
+        Self {
+            size_tree: RBTree::new(),
+            order_tree: RBTree::new(),
+        }
+    }
+}
