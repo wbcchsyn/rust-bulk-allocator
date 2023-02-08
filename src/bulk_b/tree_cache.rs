@@ -176,3 +176,27 @@ impl Ord for OrderBucket {
         this.cmp(&other)
     }
 }
+
+impl TreeBucket for OrderBucket {
+    fn child(&self, direction: Direction) -> Link<Self> {
+        match direction {
+            Direction::Left => self.0.left_order.map(NonNull::cast),
+            Direction::Right => self.0.right_order.map(NonNull::cast),
+        }
+    }
+
+    fn set_child(&mut self, child: Link<Self>, direction: Direction) {
+        match direction {
+            Direction::Left => self.0.left_order = child.map(NonNull::cast),
+            Direction::Right => self.0.right_order = child.map(NonNull::cast),
+        }
+    }
+
+    fn color(&self) -> Color {
+        self.0.order_color
+    }
+
+    fn set_color(&mut self, color: Color) {
+        self.0.order_color = color
+    }
+}
