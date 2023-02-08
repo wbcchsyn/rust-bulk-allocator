@@ -157,6 +157,18 @@ impl PartialOrd<Self> for OrderBucket {
     }
 }
 
+impl PartialOrd<NonNull<u8>> for OrderBucket {
+    fn partial_cmp(&self, other: &NonNull<u8>) -> Option<Ordering> {
+        if self == other {
+            Some(Ordering::Equal)
+        } else {
+            let this: *const u8 = (self as *const Self).cast();
+            let other: *const u8 = other.as_ptr();
+            this.partial_cmp(&other)
+        }
+    }
+}
+
 impl Ord for OrderBucket {
     fn cmp(&self, other: &Self) -> Ordering {
         let this: *const Self = self;
