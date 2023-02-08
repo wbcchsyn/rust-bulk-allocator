@@ -245,7 +245,7 @@ where
         unsafe {
             let root = self.root.map(|mut ptr| ptr.as_mut())?;
 
-            let (new_root, ret, _) = Self::iter_remove(root, key, |mut ret| {
+            let (new_root, ret, _) = Self::iter_remove(root, key, |ret| {
                 if ret.1.is_none() && ret.0.unwrap().as_ref() > key {
                     let (new_root, ret, balance) = Self::remove_bucket(ret.0.unwrap().as_mut());
                     (new_root, Some(ret), balance)
