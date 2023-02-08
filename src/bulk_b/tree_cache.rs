@@ -148,3 +148,11 @@ impl PartialEq<NonNull<u8>> for OrderBucket {
 }
 
 impl Eq for OrderBucket {}
+
+impl PartialOrd<Self> for OrderBucket {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let this: *const Self = self;
+        let other: *const Self = other;
+        this.partial_cmp(&other)
+    }
+}
