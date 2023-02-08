@@ -31,9 +31,11 @@
 
 use crate::rb_tree::{Color, Direction, RBTree, TreeBucket};
 use std::cmp::Ordering;
+use std::mem::{align_of, size_of};
 use std::ptr::NonNull;
 
 type Link<T> = Option<NonNull<T>>;
+const ALIGN: usize = align_of::<Bucket>();
 
 struct Bucket {
     left_order: Link<Self>,
@@ -50,6 +52,15 @@ struct Bucket {
 struct SizeBucket(Bucket);
 
 impl SizeBucket {
+    pub fn init(ptr: NonNull<u8>, size: usize) {
+        debug_assert!(size_of::<Self>() <= size);
+        debug_assert!(size <= u16::MAX as usize);
+        debug_assert!(size % ALIGN == 0);
+
+        let this: &mut Self = unsafe { ptr.cast().as_mut() };
+        this.0.size = size as u16;
+    }
+
     pub fn size(&self) -> usize {
         self.0.size as usize
     }
