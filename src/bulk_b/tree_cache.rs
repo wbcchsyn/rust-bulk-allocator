@@ -81,6 +81,13 @@ impl PartialEq<usize> for SizeBucket {
     }
 }
 
+#[cfg(test)]
+impl PartialEq<Bucket> for SizeBucket {
+    fn eq(&self, other: &Bucket) -> bool {
+        unsafe { self == std::mem::transmute::<&Bucket, &Self>(other) }
+    }
+}
+
 impl PartialOrd<Self> for SizeBucket {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self.0.size == other.0.size {
@@ -108,6 +115,13 @@ impl Ord for SizeBucket {
 impl PartialOrd<usize> for SizeBucket {
     fn partial_cmp(&self, other: &usize) -> Option<Ordering> {
         self.size().partial_cmp(other)
+    }
+}
+
+#[cfg(test)]
+impl PartialOrd<Bucket> for SizeBucket {
+    fn partial_cmp(&self, other: &Bucket) -> Option<Ordering> {
+        unsafe { self.partial_cmp(std::mem::transmute::<&Bucket, &SizeBucket>(other)) }
     }
 }
 
@@ -167,6 +181,13 @@ impl PartialEq<NonNull<u8>> for OrderBucket {
     }
 }
 
+#[cfg(test)]
+impl PartialEq<Bucket> for OrderBucket {
+    fn eq(&self, other: &Bucket) -> bool {
+        unsafe { self == std::mem::transmute::<&Bucket, &Self>(other) }
+    }
+}
+
 impl Eq for OrderBucket {}
 
 impl PartialOrd<Self> for OrderBucket {
@@ -186,6 +207,13 @@ impl PartialOrd<NonNull<u8>> for OrderBucket {
             let other: *const u8 = other.as_ptr();
             this.partial_cmp(&other)
         }
+    }
+}
+
+#[cfg(test)]
+impl PartialOrd<Bucket> for OrderBucket {
+    fn partial_cmp(&self, other: &Bucket) -> Option<Ordering> {
+        unsafe { self.partial_cmp(std::mem::transmute::<&Bucket, &OrderBucket>(other)) }
     }
 }
 
