@@ -275,7 +275,39 @@ impl TreeCache {
         }
     }
 
-    /// Does nothing and returns `false` if `size` is too small to cache; otherwise, caches ptr
+    pub fn alloc(&mut self, size: usize) -> Option<(NonNull<u8>, usize)> {
+        debug_assert!(size % ALIGN == 0);
+        debug_assert!(0 < size);
+
+        unsafe {
+            // Try to find a memory block from size_tree.
+            let mut ptr = self.size_tree.remove_lower_bound(&size)?;
+            let size_bucket = ptr.as_mut();
+
+            // Take the end of ptr as a return value and cache again the rest
+            // if the memory block is large enough.
+            let rest_size = size_bucket.size() - size;
+            if size_of::<Bucket>() <= rest_size {
+                // Store into size_tree again.
+                SizeBucket::init(ptr.cast(), rest_size);
+                self.size_tree.insert(size_bucket);
+
+                // Do nothing for order_tree, because changing size does not matter to it.
+
+                // Return
+                let ret = ptr.as_ptr().cast::<u8>().add(rest_size);
+                Some((NonNull::new_unchecked(ret), size))
+            } else {
+                // Return all of the memory block.
+                let order_bucket: &mut OrderBucket = ptr.cast().as_mut();
+                self.order_tree.remove(order_bucket);
+
+                Some((ptr.cast(), size_bucket.size()))
+            }
+        }
+    }
+
+    /// Does nothing and returns `false` if `layout` is too small to cache; otherwise, caches ptr
     /// and returns `true`.
     pub fn dealloc(&mut self, ptr: NonNull<u8>, size: usize) -> bool {
         debug_assert!(ptr.as_ptr() as usize % ALIGN == 0);
@@ -337,6 +369,194 @@ impl TreeCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_alloc() {
+        let mut cache = TreeCache::new();
+
+        // Make cache to prepare.
+        type Block = [usize; 16];
+        let mut blocks: Vec<Block> = Vec::with_capacity(1024);
+        unsafe { blocks.set_len(1024) };
+        for i in 0..blocks.len() {
+            if i % 2 == 1 {
+                continue;
+            } else {
+                let size = size_of::<Block>();
+                let ptr = NonNull::from(&mut blocks[i]);
+                cache.dealloc(ptr.cast(), size);
+            }
+        }
+
+        // Test to allocate
+        for _ in 0..8 {
+            let mut pointers = Vec::new();
+
+            for (_, size) in (0..512).zip((ALIGN..=size_of::<Block>()).cycle()) {
+                let size = size - (size % ALIGN);
+                let allocated = cache.alloc(size);
+
+                assert!(allocated.is_some());
+
+                let (ptr, s) = allocated.unwrap();
+                assert!(ptr.as_ptr() as usize % ALIGN == 0);
+                assert!(size <= s);
+                assert!(s < size + size_of::<Bucket>());
+
+                unsafe { ptr.as_ptr().write_bytes(0xff, s) };
+
+                // Make sure cache works well.
+                unsafe { ptr.as_ptr().write_bytes(0xff, s) };
+
+                pointers.push((ptr, s));
+            }
+
+            for (ptr, size) in pointers {
+                cache.dealloc(ptr, size);
+            }
+        }
+    }
+
+    #[test]
+    fn test_alloc_fraction() {
+        let mut buckets: Vec<Bucket> = Vec::with_capacity(3);
+        unsafe { buckets.set_len(3) };
+
+        // Cache 1 bucket, and allocate 1 byte.
+        {
+            let mut cache = TreeCache::new();
+
+            // Cache 1 bucket
+            {
+                let ptr = NonNull::from(&mut buckets[0]);
+                let size = size_of::<Bucket>();
+                cache.dealloc(ptr.cast(), size);
+            }
+
+            // Alloc the minimum size
+            {
+                let size = ALIGN;
+                let allocated = cache.alloc(size);
+
+                assert!(allocated.is_some());
+
+                let (ptr, s) = allocated.unwrap();
+                assert!(size <= s);
+                unsafe { ptr.as_ptr().write_bytes(0xff, s) };
+            }
+
+            // Make sure no cache is left.
+            assert!(cache.is_empty());
+        }
+
+        // Cache a series of buckets, and allocate 1 byte and size_of::<Bucket>()
+        {
+            let mut cache = TreeCache::new();
+
+            // Cache 2 buckets
+            {
+                let size = 2 * size_of::<Bucket>();
+                let ptr = NonNull::from(&mut buckets[0]);
+                cache.dealloc(ptr.cast(), size);
+            }
+
+            // Alloc the minimum bytes.
+            {
+                let size = ALIGN;
+                let allocated = cache.alloc(size);
+
+                assert!(allocated.is_some());
+
+                let (ptr, s) = allocated.unwrap();
+                assert!(size <= s);
+                unsafe { ptr.as_ptr().write_bytes(0xff, s) };
+            }
+
+            // Alloc size_of::<Bucket>()
+            {
+                let size = size_of::<Bucket>();
+                let allocated = cache.alloc(size);
+
+                assert!(allocated.is_some());
+
+                let (ptr, s) = allocated.unwrap();
+                assert!(size <= s);
+                unsafe { ptr.as_ptr().write_bytes(0xff, s) };
+            }
+
+            // Make sure no cache is left.
+            assert!(cache.is_empty());
+        }
+
+        // Cache a series of buckets, and allocate size_of::<Bucket>() and 1 byte
+        {
+            let mut cache = TreeCache::new();
+
+            // Cache 2 buckets
+            {
+                let size = 2 * size_of::<Bucket>();
+                let ptr = NonNull::from(&mut buckets[0]);
+                cache.dealloc(ptr.cast(), size);
+            }
+
+            // Alloc size_of::<Bucket>()
+            {
+                let size = size_of::<Bucket>();
+                let allocated = cache.alloc(size);
+
+                assert!(allocated.is_some());
+
+                let (ptr, s) = allocated.unwrap();
+                assert!(size <= s);
+                unsafe { ptr.as_ptr().write_bytes(0xff, s) };
+            }
+
+            // Alloc the minimum bytes.
+            {
+                let size = ALIGN;
+                let allocated = cache.alloc(size);
+
+                assert!(allocated.is_some());
+
+                let (ptr, s) = allocated.unwrap();
+                assert!(size <= s);
+                unsafe { ptr.as_ptr().write_bytes(0xff, s) };
+            }
+
+            // Make sure no cache is left.
+            assert!(cache.is_empty());
+        }
+
+        // Cache a separated of buckets, and allocate 1 byte twice.
+        {
+            let mut cache = TreeCache::new();
+
+            // Cache 2 buckets
+            {
+                let size = size_of::<Bucket>();
+                let ptr = NonNull::from(&mut buckets[0]);
+                cache.dealloc(ptr.cast(), size);
+
+                let ptr = NonNull::from(&mut buckets[2]);
+                cache.dealloc(ptr.cast(), size);
+            }
+
+            // Alloc the minimum bytes twice.
+            for _ in 0..2 {
+                let size = ALIGN;
+                let allocated = cache.alloc(size);
+
+                assert!(allocated.is_some());
+
+                let (ptr, s) = allocated.unwrap();
+                assert!(size <= s);
+                unsafe { ptr.as_ptr().write_bytes(0xff, s) };
+            }
+
+            // Make sure no cache is left.
+            assert!(cache.is_empty());
+        }
+    }
 
     #[test]
     fn test_dealloc_merge() {
