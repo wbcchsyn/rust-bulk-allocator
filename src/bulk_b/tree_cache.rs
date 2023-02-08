@@ -138,4 +138,13 @@ impl PartialEq<Self> for OrderBucket {
     }
 }
 
+impl PartialEq<NonNull<u8>> for OrderBucket {
+    fn eq(&self, other: &NonNull<u8>) -> bool {
+        let begin: *const u8 = (self as *const Self).cast();
+        let end: *const u8 = unsafe { begin.add(self.size()) };
+        let other: *const u8 = other.as_ptr();
+        begin <= other && other < end
+    }
+}
+
 impl Eq for OrderBucket {}
