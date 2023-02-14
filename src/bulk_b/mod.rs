@@ -34,8 +34,10 @@ mod small_cache;
 
 use self::large_cache::LargeCache;
 use self::small_cache::SmallCache;
+use crate::MEMORY_CHUNK_SIZE;
 use std::alloc::GlobalAlloc;
 use std::cell::{Cell, UnsafeCell};
+use std::mem::size_of;
 use std::ptr::NonNull;
 
 type Link<T> = Option<NonNull<T>>;
@@ -48,4 +50,12 @@ where
     small_cache: UnsafeCell<SmallCache>,
     to_free: Cell<Link<u8>>,
     backend: B,
+}
+
+impl<B> BulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    /// The max byte size that `BulkAlloc` can cache.
+    pub const MAX_CACHE_SIZE: usize = MEMORY_CHUNK_SIZE - size_of::<Link<u8>>();
 }
