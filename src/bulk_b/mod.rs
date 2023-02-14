@@ -95,3 +95,16 @@ where
         }
     }
 }
+
+unsafe impl<B> GlobalAlloc for BulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        todo!()
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        todo!()
+    }
+}
