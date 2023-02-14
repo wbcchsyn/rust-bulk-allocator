@@ -154,6 +154,21 @@ where
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        todo!()
+        // Delegate the request if layout is too large.
+        if Self::MAX_CACHE_SIZE < layout.size() || Self::ALIGN < layout.align() {
+            self.backend.dealloc(ptr, layout);
+            return;
+        }
+
+        // Round up size.
+        let size = (layout.size() + Self::ALIGN - 1) / Self::ALIGN * Self::ALIGN;
+
+        // Cache ptr.
+        let small_cache = &mut *self.small_cache.get();
+        let large_cache = &mut *self.large_cache.get();
+        let ptr = NonNull::new(ptr).unwrap();
+
+        let _is_ok = large_cache.dealloc(ptr, size) || small_cache.dealloc(ptr, size);
+        debug_assert!(_is_ok);
     }
 }
