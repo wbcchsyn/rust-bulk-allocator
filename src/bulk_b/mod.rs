@@ -162,6 +162,7 @@ where
 
         // Round up size.
         let size = (layout.size() + Self::ALIGN - 1) / Self::ALIGN * Self::ALIGN;
+        debug_assert!(ptr as usize % Self::ALIGN == 0);
 
         // Cache ptr.
         let small_cache = &mut *self.small_cache.get();
@@ -170,5 +171,82 @@ where
 
         let _is_ok = large_cache.dealloc(ptr, size) || small_cache.dealloc(ptr, size);
         debug_assert!(_is_ok);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gharial::GAlloc;
+
+    type Alloc = BulkAlloc<GAlloc>;
+
+    #[test]
+    fn test_alloc_large_layout() {
+        let backend = GAlloc::default();
+        let alloc = BulkAlloc::new(backend.clone());
+
+        // Large align
+        for size in (1..64).chain([Alloc::MAX_CACHE_SIZE, Alloc::MAX_CACHE_SIZE + 1]) {
+            unsafe {
+                let align = 2 * Alloc::ALIGN;
+                let layout = Layout::from_size_align(size, align).unwrap();
+
+                let ptr = alloc.alloc(layout);
+                assert_eq!(ptr.is_null(), false);
+                assert_eq!(backend.providing_pointers(), [(ptr, layout)]);
+
+                ptr.write_bytes(0xff, size);
+                alloc.dealloc(ptr, layout);
+            }
+        }
+
+        // Large size
+        let mut align = 1;
+        while align <= Alloc::ALIGN {
+            unsafe {
+                let size = Alloc::MAX_CACHE_SIZE + 1;
+                let layout = Layout::from_size_align(size, align).unwrap();
+
+                let ptr = alloc.alloc(layout);
+                assert_eq!(ptr.is_null(), false);
+                assert_eq!(backend.providing_pointers(), [(ptr, layout)]);
+
+                ptr.write_bytes(0xff, size);
+                alloc.dealloc(ptr, layout);
+            }
+
+            align *= 2;
+        }
+    }
+
+    #[test]
+    fn test_alloc_dealloc() {
+        let backend = GAlloc::default();
+        let alloc = Alloc::new(backend.clone());
+
+        unsafe {
+            for _ in 0..16 {
+                let mut align = 1;
+                let mut pointers = Vec::new();
+
+                while align <= Alloc::ALIGN {
+                    for size in (0..1024).chain([Alloc::MAX_CACHE_SIZE]) {
+                        let layout = Layout::from_size_align(size, align).unwrap();
+                        let ptr = alloc.alloc(layout);
+
+                        assert_eq!(ptr.is_null(), false);
+                        ptr.write_bytes(0xff, layout.size());
+                        pointers.push((ptr, layout));
+                    }
+
+                    align *= 2;
+                }
+
+                for (ptr, layout) in pointers {
+                    alloc.dealloc(ptr, layout);
+                }
+            }
+        }
     }
 }
