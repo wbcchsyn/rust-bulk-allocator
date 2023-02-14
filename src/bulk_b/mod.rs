@@ -35,9 +35,9 @@ mod small_cache;
 use self::large_cache::LargeCache;
 use self::small_cache::SmallCache;
 use crate::MEMORY_CHUNK_SIZE;
-use std::alloc::GlobalAlloc;
+use std::alloc::{GlobalAlloc, Layout};
 use std::cell::{Cell, UnsafeCell};
-use std::mem::size_of;
+use std::mem::{align_of, size_of};
 use std::ptr::NonNull;
 
 type Link<T> = Option<NonNull<T>>;
@@ -58,4 +58,25 @@ where
 {
     /// The max byte size that `BulkAlloc` can cache.
     pub const MAX_CACHE_SIZE: usize = MEMORY_CHUNK_SIZE - size_of::<Link<u8>>();
+    const ALIGN: usize = align_of::<usize>();
+}
+
+impl<B> Drop for BulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    fn drop(&mut self) {
+        let mut it = self.to_free.get();
+
+        unsafe {
+            let layout = Layout::from_size_align(MEMORY_CHUNK_SIZE, Self::ALIGN).unwrap();
+
+            while let Some(ptr) = it {
+                it = NonNull::new(*ptr.cast().as_ref());
+
+                let ptr = ptr.as_ptr().offset(-1 * Self::MAX_CACHE_SIZE as isize);
+                self.backend.dealloc(ptr, layout);
+            }
+        }
+    }
 }
