@@ -31,3 +31,21 @@
 
 mod large_cache;
 mod small_cache;
+
+use self::large_cache::LargeCache;
+use self::small_cache::SmallCache;
+use std::alloc::GlobalAlloc;
+use std::cell::{Cell, UnsafeCell};
+use std::ptr::NonNull;
+
+type Link<T> = Option<NonNull<T>>;
+
+pub struct BulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    large_cache: UnsafeCell<LargeCache>,
+    small_cache: UnsafeCell<SmallCache>,
+    to_free: Cell<Link<u8>>,
+    backend: B,
+}
