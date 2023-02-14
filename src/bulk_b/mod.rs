@@ -80,3 +80,18 @@ where
         }
     }
 }
+
+impl<B> BulkAlloc<B>
+where
+    B: GlobalAlloc,
+{
+    /// Creates a new instance.
+    pub const fn new(backend: B) -> Self {
+        Self {
+            large_cache: UnsafeCell::new(LargeCache::new()),
+            small_cache: UnsafeCell::new(SmallCache::new()),
+            to_free: Cell::new(None),
+            backend,
+        }
+    }
+}
