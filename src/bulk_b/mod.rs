@@ -38,7 +38,7 @@ use crate::MEMORY_CHUNK_SIZE;
 use std::alloc::{GlobalAlloc, Layout};
 use std::cell::{Cell, UnsafeCell};
 use std::mem::{align_of, size_of};
-use std::ptr::NonNull;
+use std::ptr::{null_mut, NonNull};
 
 type Link<T> = Option<NonNull<T>>;
 
@@ -101,7 +101,56 @@ where
     B: GlobalAlloc,
 {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        todo!()
+        // Delegate the request if layout is too large.
+        if Self::MAX_CACHE_SIZE < layout.size() || Self::ALIGN < layout.align() {
+            return self.backend.alloc(layout);
+        }
+
+        // Round up size.
+        let request_size = (layout.size() + Self::ALIGN - 1) / Self::ALIGN * Self::ALIGN;
+
+        let small_cache = &mut *self.small_cache.get();
+        let large_cache = &mut *self.large_cache.get();
+
+        // Search memory block in small_cache and large_cache.
+        // If no cache is hit, allocate from the backend.
+        let (ptr, alloc_size) = if let Some((ptr, size)) = small_cache.alloc(request_size) {
+            (ptr, size)
+        } else if let Some((ptr, size)) = large_cache.alloc(request_size) {
+            (ptr, size)
+        } else {
+            let layout = Layout::from_size_align(MEMORY_CHUNK_SIZE, Self::ALIGN).unwrap();
+            let ptr = self.backend.alloc(layout);
+
+            if ptr.is_null() {
+                return ptr;
+            } else {
+                // Take the end of memory block and append to self.to_free.
+                {
+                    let ptr = ptr.add(Self::MAX_CACHE_SIZE);
+                    *ptr.cast() = self
+                        .to_free
+                        .get()
+                        .map(NonNull::as_ptr)
+                        .unwrap_or(null_mut());
+                    self.to_free.set(NonNull::new(ptr));
+                }
+
+                (NonNull::new_unchecked(ptr), Self::MAX_CACHE_SIZE)
+            }
+        };
+
+        debug_assert!(alloc_size % Self::ALIGN == 0);
+
+        // Take the end of the memory block as the return value, and cache the rest again if necessary.
+        let rest_size = alloc_size - request_size;
+        if 0 < rest_size {
+            let _is_ok = large_cache.dealloc_without_merge(ptr, rest_size)
+                || small_cache.dealloc(ptr, rest_size);
+            debug_assert!(_is_ok);
+        }
+
+        ptr.as_ptr().add(rest_size)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
