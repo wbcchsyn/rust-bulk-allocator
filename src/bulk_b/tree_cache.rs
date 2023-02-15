@@ -264,6 +264,17 @@ impl TreeCache {
         }
     }
 
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        if self.size_tree.is_empty() {
+            assert!(self.order_tree.is_empty());
+            true
+        } else {
+            assert_eq!(self.order_tree.is_empty(), false);
+            false
+        }
+    }
+
     /// Does nothing and returns `false` if `size` is too small to cache; otherwise, caches ptr
     /// and returns `true`.
     pub fn dealloc(&mut self, ptr: NonNull<u8>, size: usize) -> bool {
