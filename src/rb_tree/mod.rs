@@ -442,6 +442,11 @@ where
             }
         }
     }
+
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.root.is_none()
+    }
 }
 
 #[cfg(test)]
