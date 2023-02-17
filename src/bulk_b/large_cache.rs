@@ -252,12 +252,12 @@ impl TreeBucket for OrderBucket {
     }
 }
 
-pub struct TreeCache {
+pub struct LargeCache {
     size_tree: RBTree<SizeBucket>,
     order_tree: RBTree<OrderBucket>,
 }
 
-impl TreeCache {
+impl LargeCache {
     pub const fn new() -> Self {
         Self {
             size_tree: RBTree::new(),
@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn test_alloc() {
-        let mut cache = TreeCache::new();
+        let mut cache = LargeCache::new();
 
         // Make cache to prepare.
         type Block = [usize; 16];
@@ -445,7 +445,7 @@ mod tests {
 
         // Cache 1 bucket, and allocate 1 byte.
         {
-            let mut cache = TreeCache::new();
+            let mut cache = LargeCache::new();
 
             // Cache 1 bucket
             {
@@ -472,7 +472,7 @@ mod tests {
 
         // Cache a series of buckets, and allocate 1 byte and size_of::<Bucket>()
         {
-            let mut cache = TreeCache::new();
+            let mut cache = LargeCache::new();
 
             // Cache 2 buckets
             {
@@ -511,7 +511,7 @@ mod tests {
 
         // Cache a series of buckets, and allocate size_of::<Bucket>() and 1 byte
         {
-            let mut cache = TreeCache::new();
+            let mut cache = LargeCache::new();
 
             // Cache 2 buckets
             {
@@ -550,7 +550,7 @@ mod tests {
 
         // Cache a separated of buckets, and allocate 1 byte twice.
         {
-            let mut cache = TreeCache::new();
+            let mut cache = LargeCache::new();
 
             // Cache 2 buckets
             {
@@ -585,7 +585,7 @@ mod tests {
             let mut buckets: Vec<Bucket> = Vec::with_capacity(5);
             buckets.set_len(5);
 
-            let mut cache = TreeCache::new();
+            let mut cache = LargeCache::new();
             let size = size_of::<Bucket>();
 
             // dealloc the first block
@@ -713,7 +713,7 @@ mod tests {
             let mut buckets: Vec<Bucket> = Vec::with_capacity(3);
             buckets.set_len(3);
 
-            let mut cache = TreeCache::new();
+            let mut cache = LargeCache::new();
             let size = size_of::<Bucket>();
 
             // dealloc the 2nd block
