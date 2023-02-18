@@ -41,6 +41,12 @@ pub enum Color {
 }
 
 pub trait Bucket {
+    fn init(&mut self) {
+        self.set_left(None);
+        self.set_right(None);
+        self.set_color(Color::Red);
+    }
+
     fn child(&self, direction: Direction) -> Link<Self>;
     fn set_child(&mut self, child: Link<Self>, direction: Direction);
 
