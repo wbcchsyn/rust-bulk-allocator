@@ -137,9 +137,7 @@ where
     where
         B: Ord,
     {
-        debug_assert!(bucket.color() == Color::Red);
-        debug_assert!(bucket.child(Direction::Left) == None);
-        debug_assert!(bucket.child(Direction::Right) == None);
+        bucket.init();
 
         match unsafe { self.root.map(|mut ptr| ptr.as_mut()) } {
             None => {
@@ -445,14 +443,7 @@ mod tests {
 
             unsafe {
                 ret.set_len(n);
-
-                for i in 0..n {
-                    let b = &mut ret[i];
-                    b.left_ = None;
-                    b.right_ = None;
-                    b.color_ = Color::Red;
-                    b.v = i
-                }
+                (0..n).for_each(|i| ret[i].v = i);
             }
 
             ret
