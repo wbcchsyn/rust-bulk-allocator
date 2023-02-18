@@ -40,3 +40,9 @@ const MAX_CACHE_SIZE: usize = INNER_CACEH_SIZE * ALIGN;
 const INNER_CACEH_SIZE: usize = (large_cache::MIN_CACHE_SIZE - 1) / ALIGN;
 
 pub struct SmallCache([Link<u8>; INNER_CACEH_SIZE]);
+
+impl SmallCache {
+    pub const fn new() -> Self {
+        Self([None; INNER_CACEH_SIZE])
+    }
+}
