@@ -105,7 +105,7 @@ pub struct RBTree<B> {
 }
 
 impl<B> RBTree<B> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { root: None }
     }
 }
@@ -441,6 +441,11 @@ where
                 }
             }
         }
+    }
+
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.root.is_none()
     }
 }
 
