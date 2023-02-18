@@ -282,13 +282,14 @@ impl TreeCache {
         unsafe {
             // Try to find a memory block from size_tree.
             let mut ptr = self.size_tree.remove_lower_bound(&size)?;
-            let size_bucket = ptr.as_mut();
+            let alloc_size = ptr.as_ref().size();
 
             // Take the end of ptr as a return value and cache again the rest
             // if the memory block is large enough.
-            let rest_size = size_bucket.size() - size;
+            let rest_size = alloc_size - size;
             if size_of::<Bucket>() <= rest_size {
                 // Store into size_tree again.
+                let size_bucket = ptr.as_mut();
                 SizeBucket::init(ptr.cast(), rest_size);
                 self.size_tree.insert(size_bucket);
 
@@ -302,8 +303,27 @@ impl TreeCache {
                 let order_bucket: &mut OrderBucket = ptr.cast().as_mut();
                 self.order_tree.remove(order_bucket);
 
-                Some((ptr.cast(), size_bucket.size()))
+                Some((ptr.cast(), alloc_size))
             }
+        }
+    }
+
+    pub fn dealloc_without_merge(&mut self, ptr: NonNull<u8>, size: usize) -> bool {
+        debug_assert!(ptr.as_ptr() as usize % ALIGN == 0);
+        debug_assert!(size % ALIGN == 0);
+
+        if size < size_of::<Bucket>() {
+            false
+        } else {
+            unsafe {
+                SizeBucket::init(ptr, size);
+                self.size_tree.insert(ptr.cast().as_mut());
+
+                OrderBucket::init(ptr, size);
+                self.order_tree.insert(ptr.cast().as_mut());
+            }
+
+            true
         }
     }
 
