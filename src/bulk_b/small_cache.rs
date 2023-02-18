@@ -28,3 +28,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+use super::large_cache;
+use std::mem::align_of;
+use std::ptr::NonNull;
+
+type Link<T> = Option<NonNull<T>>;
+
+const ALIGN: usize = align_of::<Link<u8>>();
+const MAX_CACHE_SIZE: usize = INNER_CACEH_SIZE * ALIGN;
+const INNER_CACEH_SIZE: usize = (large_cache::MIN_CACHE_SIZE - 1) / ALIGN;
+
+pub struct SmallCache([Link<u8>; INNER_CACEH_SIZE]);
