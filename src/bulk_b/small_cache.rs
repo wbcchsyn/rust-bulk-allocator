@@ -46,6 +46,25 @@ impl SmallCache {
         Self([None; INNER_CACEH_SIZE])
     }
 
+    pub fn alloc(&mut self, size: usize) -> Option<(NonNull<u8>, usize)> {
+        debug_assert!(size % ALIGN == 0);
+
+        if size == 0 {
+            let ptr = NonNull::<Link<u8>>::dangling();
+            Some((ptr.cast(), 0))
+        } else {
+            let index = (size / ALIGN) - 1;
+            for i in index..INNER_CACEH_SIZE {
+                if let Some(ptr) = self.0[i] {
+                    self.0[i] = unsafe { NonNull::new(*ptr.cast().as_ref()) };
+                    return Some((ptr, (i + 1) * ALIGN));
+                }
+            }
+
+            None
+        }
+    }
+
     /// Does nothing and returns `false` if `size` is too large to cache; otherwise, caches ptr
     /// and returns `true`.
     pub fn dealloc(&mut self, ptr: NonNull<u8>, size: usize) -> bool {
@@ -65,11 +84,70 @@ impl SmallCache {
 
         true
     }
+
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.0.iter().all(Option::is_none)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_alloc_dealloc() {
+        const LEN: usize = 4096;
+
+        let mut cache = SmallCache::new();
+
+        unsafe {
+            let mut buffer: Vec<usize> = Vec::with_capacity(LEN);
+            buffer.set_len(LEN);
+
+            // 1st deallocation
+            let count = {
+                let mut ptr = buffer.as_mut_ptr().cast::<u8>();
+                let end = buffer.as_ptr().add(LEN).cast::<u8>();
+                let mut count = 0;
+
+                for size in (0..=MAX_CACHE_SIZE).step_by(ALIGN).cycle() {
+                    if end < ptr.add(size) {
+                        break;
+                    }
+
+                    cache.dealloc(NonNull::new(ptr).unwrap(), size);
+
+                    count += 1;
+                    ptr = ptr.add(size);
+                }
+
+                count
+            };
+
+            // Repeat allocation and deallocation
+            for _ in 0..16 {
+                let mut pointers = Vec::new();
+
+                for size in (0..=MAX_CACHE_SIZE).step_by(ALIGN).cycle().take(count) {
+                    let result = cache.alloc(size);
+                    assert!(result.is_some());
+
+                    let (ptr, s) = result.unwrap();
+                    assert_eq!(s, size);
+
+                    ptr.as_ptr().write_bytes(0xff, size);
+                    pointers.push((ptr, size));
+                }
+
+                assert!(cache.is_empty());
+
+                for (ptr, size) in pointers {
+                    cache.dealloc(ptr, size);
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_dealloc() {
