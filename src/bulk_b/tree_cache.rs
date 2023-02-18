@@ -36,6 +36,7 @@ use std::ptr::NonNull;
 
 type Link<T> = Option<NonNull<T>>;
 const ALIGN: usize = align_of::<Bucket>();
+pub const MIN_CACHE_SIZE: usize = size_of::<Bucket>();
 
 struct Bucket {
     left_order: Link<Self>,
