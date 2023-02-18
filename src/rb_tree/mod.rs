@@ -34,6 +34,7 @@ use std::ptr::NonNull;
 
 type Link<B> = Option<NonNull<B>>;
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
     Red,
