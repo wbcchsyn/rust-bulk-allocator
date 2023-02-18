@@ -41,7 +41,7 @@ pub enum Color {
     Black,
 }
 
-pub trait Bucket {
+pub trait TreeBucket {
     fn init(&mut self) {
         self.set_left(None);
         self.set_right(None);
@@ -112,7 +112,7 @@ impl<B> RBTree<B> {
 
 impl<B> RBTree<B>
 where
-    B: Bucket,
+    B: TreeBucket,
 {
     /// # Safety
     ///
@@ -412,7 +412,7 @@ where
                 let straight_nephew = brother.0.child(brother.1);
                 let alter_nephew = brother.0.child(lacking.1);
 
-                if straight_nephew.map(|ptr| Bucket::color(ptr.as_ref())) == Some(Color::Red) {
+                if straight_nephew.map(|ptr| ptr.as_ref().color()) == Some(Color::Red) {
                     parent.set_child(alter_nephew, brother.1);
                     brother.0.set_child(NonNull::new(parent), lacking.1);
 
@@ -421,7 +421,7 @@ where
                     parent.set_color(Color::Black);
 
                     (brother.0, Balance::Ok)
-                } else if alter_nephew.map(|ptr| Bucket::color(ptr.as_ref())) == Some(Color::Red) {
+                } else if alter_nephew.map(|ptr| ptr.as_ref().color()) == Some(Color::Red) {
                     let nephew = alter_nephew.unwrap().as_mut();
                     parent.set_child(nephew.child(lacking.1), brother.1);
                     brother.0.set_child(nephew.child(brother.1), lacking.1);
@@ -469,7 +469,7 @@ mod tests {
         }
     }
 
-    impl Bucket for B {
+    impl TreeBucket for B {
         fn child(&self, direction: Direction) -> Link<Self> {
             match direction {
                 Direction::Left => self.left_,
