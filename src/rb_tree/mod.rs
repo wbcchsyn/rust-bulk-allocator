@@ -34,13 +34,20 @@ use std::ptr::NonNull;
 
 type Link<B> = Option<NonNull<B>>;
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
     Red,
     Black,
 }
 
-pub trait Bucket {
+pub trait TreeBucket {
+    fn init(&mut self) {
+        self.set_left(None);
+        self.set_right(None);
+        self.set_color(Color::Red);
+    }
+
     fn child(&self, direction: Direction) -> Link<Self>;
     fn set_child(&mut self, child: Link<Self>, direction: Direction);
 
@@ -105,7 +112,7 @@ impl<B> RBTree<B> {
 
 impl<B> RBTree<B>
 where
-    B: Bucket,
+    B: TreeBucket,
 {
     /// # Safety
     ///
@@ -131,9 +138,7 @@ where
     where
         B: Ord,
     {
-        debug_assert!(bucket.color() == Color::Red);
-        debug_assert!(bucket.child(Direction::Left) == None);
-        debug_assert!(bucket.child(Direction::Right) == None);
+        bucket.init();
 
         match unsafe { self.root.map(|mut ptr| ptr.as_mut()) } {
             None => {
@@ -277,6 +282,24 @@ where
         }
     }
 
+    /// Returns one arbitrary bucket removing it if not empty; otherwise, does nothing and returns `None`.
+    ///
+    /// This method always pops the min bucket for now.
+    pub fn pop_one(&mut self) -> Link<B>
+    where
+        B: Ord,
+    {
+        unsafe {
+            let mut root = self.root?;
+
+            let (new_root, popped, _) = Self::pop_min(root.as_mut());
+            new_root.map(|mut ptr| ptr.as_mut().set_color(Color::Black));
+            self.root = new_root;
+
+            Some(popped)
+        }
+    }
+
     unsafe fn iter_remove<K, F>(parent: &mut B, key: &K, f: F) -> (Link<B>, Link<B>, Balance)
     where
         B: PartialOrd<K>,
@@ -389,7 +412,7 @@ where
                 let straight_nephew = brother.0.child(brother.1);
                 let alter_nephew = brother.0.child(lacking.1);
 
-                if straight_nephew.map(|ptr| Bucket::color(ptr.as_ref())) == Some(Color::Red) {
+                if straight_nephew.map(|ptr| ptr.as_ref().color()) == Some(Color::Red) {
                     parent.set_child(alter_nephew, brother.1);
                     brother.0.set_child(NonNull::new(parent), lacking.1);
 
@@ -398,7 +421,7 @@ where
                     parent.set_color(Color::Black);
 
                     (brother.0, Balance::Ok)
-                } else if alter_nephew.map(|ptr| Bucket::color(ptr.as_ref())) == Some(Color::Red) {
+                } else if alter_nephew.map(|ptr| ptr.as_ref().color()) == Some(Color::Red) {
                     let nephew = alter_nephew.unwrap().as_mut();
                     parent.set_child(nephew.child(lacking.1), brother.1);
                     brother.0.set_child(nephew.child(brother.1), lacking.1);
@@ -439,21 +462,14 @@ mod tests {
 
             unsafe {
                 ret.set_len(n);
-
-                for i in 0..n {
-                    let b = &mut ret[i];
-                    b.left_ = None;
-                    b.right_ = None;
-                    b.color_ = Color::Red;
-                    b.v = i
-                }
+                (0..n).for_each(|i| ret[i].v = i);
             }
 
             ret
         }
     }
 
-    impl Bucket for B {
+    impl TreeBucket for B {
         fn child(&self, direction: Direction) -> Link<Self> {
             match direction {
                 Direction::Left => self.left_,
@@ -1077,5 +1093,103 @@ mod tests {
             let ptr = unsafe { tree.find(&LEN) };
             assert!(ptr.is_none());
         }
+    }
+
+    #[test]
+    fn test_insert_permutation_pop_one() {
+        const LEN: usize = 12;
+        let mut order: Vec<usize> = (0..LEN).collect();
+
+        while {
+            let mut tree = RBTree::new();
+            let mut buckets = B::build(LEN);
+            order.iter().for_each(|&i| tree.insert(&mut buckets[i]));
+
+            for i in 0..LEN {
+                let popped = tree.pop_one();
+                check_tree(&tree);
+
+                assert!(popped.is_some());
+
+                let popped = popped.unwrap();
+                assert!(popped == NonNull::from(&mut buckets[i]).cast());
+            }
+
+            assert!(tree.pop_one().is_none());
+
+            permutation_next(&mut order)
+        } {}
+    }
+
+    #[test]
+    fn test_insert_in_order_pop_one() {
+        const LEN: usize = 128;
+
+        let mut tree = RBTree::new();
+        let mut buckets = B::build(LEN);
+        buckets.iter_mut().for_each(|b| tree.insert(b));
+
+        for i in 0..LEN {
+            let popped = tree.pop_one();
+            check_tree(&tree);
+
+            assert!(popped.is_some());
+
+            let popped = popped.unwrap();
+            assert!(popped == NonNull::from(&mut buckets[i]).cast());
+        }
+
+        assert!(tree.pop_one().is_none());
+    }
+
+    #[test]
+    fn test_insert_rev_order_pop_one() {
+        const LEN: usize = 128;
+
+        let mut tree = RBTree::new();
+        let mut buckets = B::build(LEN);
+        buckets.iter_mut().rev().for_each(|b| tree.insert(b));
+
+        for i in 0..LEN {
+            let popped = tree.pop_one();
+            check_tree(&tree);
+
+            assert!(popped.is_some());
+
+            let popped = popped.unwrap();
+            assert!(popped == NonNull::from(&mut buckets[i]).cast());
+        }
+
+        assert!(tree.pop_one().is_none());
+    }
+
+    #[test]
+    fn test_insert_alternate_pop_one() {
+        const LEN: usize = 128;
+
+        let mut tree = RBTree::new();
+        let mut buckets = B::build(LEN);
+
+        let mut a = 0;
+        let mut b = LEN - 1;
+        while a < b {
+            tree.insert(&mut buckets[a]);
+            tree.insert(&mut buckets[b]);
+
+            a += 1;
+            b -= 1;
+        }
+
+        for i in 0..LEN {
+            let popped = tree.pop_one();
+            check_tree(&tree);
+
+            assert!(popped.is_some());
+
+            let popped = popped.unwrap();
+            assert!(popped == NonNull::from(&mut buckets[i]).cast());
+        }
+
+        assert!(tree.pop_one().is_none());
     }
 }
