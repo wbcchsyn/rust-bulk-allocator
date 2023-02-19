@@ -31,16 +31,18 @@
 
 #![deny(missing_docs)]
 
-//! bulk-allocator is implementations for GlobalAlloc holding memory cache.
-//! The instance acquires bulk memories from the backend, and frees them on the drop at once for
+//! bulk-allocator provides implementations of [`GlobalAlloc`] holding memory cache.
+//! The instance acquires bulk memories from the backend and frees them on the drop at once for
 //! the performance.
 //!
 //! Method `dealloc` does not free the specified pointer soon, but pools in the cache.
 //!
 //! Method `alloc` pops and returns from the cache if not empty; otherwise, `alloc` allocates a
-//! bulk memory from the backend, splits into pieces to make cache at first.
+//! bulk memory from the backend and splits into pieces to make cache at first.
 //!
 //! It is when the instance is dropped that the memory chunks are deallocated.
+//!
+//! [`GlobalAlloc`]: std::alloc::GlobalAlloc
 
 mod bulk_b;
 mod layout_bulk_b;
@@ -49,7 +51,8 @@ mod rb_tree;
 pub use bulk_b::BulkAlloc;
 pub use layout_bulk_b::{LayoutBulkAlloc, UnsafeLayoutBulkAlloc};
 
-/// The default byte count of bulk memory that this crate allocates from the backend if no cache
-/// is.
-/// Note that if too large layout is requested, the bulk size may exceed this value.
+/// The default byte count of the bulk memory that this crate allocates from the backend
+/// if no cache is.
+/// Note that if too large layout is requested, it may exceed this value that this crate
+/// acquires via the backend.
 pub const MEMORY_CHUNK_SIZE: usize = 16384; // 16 KB
