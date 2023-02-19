@@ -282,24 +282,6 @@ where
         }
     }
 
-    /// Returns one arbitrary bucket removing it if not empty; otherwise, does nothing and returns `None`.
-    ///
-    /// This method always pops the min bucket for now.
-    pub fn pop_one(&mut self) -> Link<B>
-    where
-        B: Ord,
-    {
-        unsafe {
-            let mut root = self.root?;
-
-            let (new_root, popped, _) = Self::pop_min(root.as_mut());
-            new_root.map(|mut ptr| ptr.as_mut().set_color(Color::Black));
-            self.root = new_root;
-
-            Some(popped)
-        }
-    }
-
     unsafe fn iter_remove<K, F>(parent: &mut B, key: &K, f: F) -> (Link<B>, Link<B>, Balance)
     where
         B: PartialOrd<K>,
@@ -1098,103 +1080,5 @@ mod tests {
             let ptr = unsafe { tree.find(&LEN) };
             assert!(ptr.is_none());
         }
-    }
-
-    #[test]
-    fn test_insert_permutation_pop_one() {
-        const LEN: usize = 12;
-        let mut order: Vec<usize> = (0..LEN).collect();
-
-        while {
-            let mut tree = RBTree::new();
-            let mut buckets = B::build(LEN);
-            order.iter().for_each(|&i| tree.insert(&mut buckets[i]));
-
-            for i in 0..LEN {
-                let popped = tree.pop_one();
-                check_tree(&tree);
-
-                assert!(popped.is_some());
-
-                let popped = popped.unwrap();
-                assert!(popped == NonNull::from(&mut buckets[i]).cast());
-            }
-
-            assert!(tree.pop_one().is_none());
-
-            permutation_next(&mut order)
-        } {}
-    }
-
-    #[test]
-    fn test_insert_in_order_pop_one() {
-        const LEN: usize = 128;
-
-        let mut tree = RBTree::new();
-        let mut buckets = B::build(LEN);
-        buckets.iter_mut().for_each(|b| tree.insert(b));
-
-        for i in 0..LEN {
-            let popped = tree.pop_one();
-            check_tree(&tree);
-
-            assert!(popped.is_some());
-
-            let popped = popped.unwrap();
-            assert!(popped == NonNull::from(&mut buckets[i]).cast());
-        }
-
-        assert!(tree.pop_one().is_none());
-    }
-
-    #[test]
-    fn test_insert_rev_order_pop_one() {
-        const LEN: usize = 128;
-
-        let mut tree = RBTree::new();
-        let mut buckets = B::build(LEN);
-        buckets.iter_mut().rev().for_each(|b| tree.insert(b));
-
-        for i in 0..LEN {
-            let popped = tree.pop_one();
-            check_tree(&tree);
-
-            assert!(popped.is_some());
-
-            let popped = popped.unwrap();
-            assert!(popped == NonNull::from(&mut buckets[i]).cast());
-        }
-
-        assert!(tree.pop_one().is_none());
-    }
-
-    #[test]
-    fn test_insert_alternate_pop_one() {
-        const LEN: usize = 128;
-
-        let mut tree = RBTree::new();
-        let mut buckets = B::build(LEN);
-
-        let mut a = 0;
-        let mut b = LEN - 1;
-        while a < b {
-            tree.insert(&mut buckets[a]);
-            tree.insert(&mut buckets[b]);
-
-            a += 1;
-            b -= 1;
-        }
-
-        for i in 0..LEN {
-            let popped = tree.pop_one();
-            check_tree(&tree);
-
-            assert!(popped.is_some());
-
-            let popped = popped.unwrap();
-            assert!(popped == NonNull::from(&mut buckets[i]).cast());
-        }
-
-        assert!(tree.pop_one().is_none());
     }
 }
