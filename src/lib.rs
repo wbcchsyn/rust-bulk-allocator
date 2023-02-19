@@ -42,18 +42,12 @@
 //!
 //! It is when the instance is dropped that the memory chunks are deallocated.
 
-mod bulk_a;
 mod bulk_b;
-mod layout_bulk_a;
 mod layout_bulk_b;
-mod ptr_list;
 mod rb_tree;
 
-pub use bulk_a::{BulkA, UnBulkA};
 pub use bulk_b::BulkAlloc;
-pub use layout_bulk_a::{LayoutBulkA, UnLayoutBulkA};
 pub use layout_bulk_b::{LayoutBulkAlloc, UnsafeLayoutBulkAlloc};
-use ptr_list::PtrList;
 
 /// The default byte count of bulk memory that this crate allocates from the backend if no cache
 /// is.
