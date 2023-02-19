@@ -42,6 +42,32 @@ use std::ptr::{null_mut, NonNull};
 
 type Link<T> = Option<NonNull<T>>;
 
+/// `BulkAlloc` is an implementation of [`GlobalAlloc`](`std::alloc::GlobalAlloc`)
+/// holding memory cache.
+/// This struct acquires bulk memories from the backend, and frees them on the
+/// drop at once for the performance.
+///
+/// Each instance has 2 kinds of caches: some forward linked lists to store a specific sized
+/// pointers, and one red black tree to store arbitrary sized memory block.
+///
+/// The balanced tree cache merges 2 holding pointers if they are placed next to each other.
+/// `BulkAlloc` stores a pointer into the tree cache if the size is large enough
+/// or if the pointer can be merged into another;
+/// otherwise, it is stored into the linked list cache for the size.
+///
+/// # Safety
+///
+/// Instance drop releases all the memories acquired from the backend.
+/// All the pointers allocated via the instance will be invalid after then.
+/// Accessing such a pointer may lead memory unsafety even the pointer itself is not deallocated.
+///
+/// # See also
+///
+/// - [`alloc`]
+/// - [`dealloc`]
+///
+/// [`alloc`]: Self::alloc
+/// [`dealloc`]: Self::dealloc
 pub struct BulkAlloc<B>
 where
     B: GlobalAlloc,
@@ -100,6 +126,27 @@ unsafe impl<B> GlobalAlloc for BulkAlloc<B>
 where
     B: GlobalAlloc,
 {
+    /// Method `alloc` delegates the request to the backend if `layout` is too large (i.e. the size is
+    /// greater than [`MAX_CACHE_SIZE`] or the align is greater than [`align_of::<usize>()`](align_of).
+    /// Note that usually the alignment of [`Layout`] is less than
+    /// or equals to the value unless the caller dare to enlarge it.)
+    ///
+    /// Otherwise, `alloc` searches the cache for a larger or the same size memory in the cache.
+    /// If no proper memory is found, it acquires a [`MEMORY_CHUNK_SIZE`] bytes chunk
+    /// from the backend allocator at first.
+    /// Then, it takes a pointer from the memory block to return, and caches the rest again.
+    ///
+    /// # Safety
+    ///
+    /// All the pointers allocated via the instance will be invalid after the instance drop.
+    /// Accessing such a pointer may lead memory unsafety even the pointer itself is not deallocated.
+    ///
+    /// [read more](std::alloc::GlobalAlloc::alloc)
+    ///
+    /// [`MAX_CACHE_SIZE`]: Self::MAX_CACHE_SIZE
+    /// [`align_of`]: std::mem::align_of
+    /// [`Layout`]: std::alloc::Layout
+    /// [`MEMORY_CHUNK_SIZE`]: crate::MEMORY_CHUNK_SIZE
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // Delegate the request if layout is too large.
         if Self::MAX_CACHE_SIZE < layout.size() || Self::ALIGN < layout.align() {
@@ -153,6 +200,25 @@ where
         ptr.as_ptr().add(rest_size)
     }
 
+    /// Method `dealloc` delegates the request to the backend if `layout` is too large (i.e. the size
+    /// is greater than [`MAX_CACHE_SIZE`] or the align is greater
+    /// than [`align_of::<usize>()`](align_of).
+    /// Note that usually the alignment of [`Layout`] is less than or equals to the value
+    /// unless the caller dare to enlarge it.)
+    ///
+    /// Otherwise, `dealloc` stores the passed pointer into the proper cache.
+    /// It is when the instance is dropped when the pointer is released.
+    ///
+    /// # Safety
+    ///
+    /// All the pointers allocated via the instance will be invalid after the instance drop.
+    /// Accessing such a pointer may lead memory unsafety even the pointer itself is not deallocated.
+    ///
+    /// [read more](std::alloc::GlobalAlloc::dealloc)
+    ///
+    /// [`MAX_CACHE_SIZE`]: Self::MAX_CACHE_SIZE
+    /// [`Layout`]: std::alloc::Layout
+    /// [`align_of`]: std::mem::align_of
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         // Delegate the request if layout is too large.
         if Self::MAX_CACHE_SIZE < layout.size() || Self::ALIGN < layout.align() {
