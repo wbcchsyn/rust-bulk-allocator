@@ -50,6 +50,7 @@ mod ptr_list;
 mod rb_tree;
 
 pub use bulk_a::{BulkA, UnBulkA};
+pub use bulk_b::BulkAlloc;
 pub use layout_bulk_a::{LayoutBulkA, UnLayoutBulkA};
 pub use layout_bulk_b::{LayoutBulkAlloc, UnsafeLayoutBulkAlloc};
 use ptr_list::PtrList;
