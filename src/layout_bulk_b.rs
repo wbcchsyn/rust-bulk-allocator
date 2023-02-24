@@ -130,8 +130,11 @@ where
         self.do_alloc().map(NonNull::as_ptr).unwrap_or(null_mut())
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        debug_assert_eq!(Self::block_layout(_layout), self.layout.get());
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if self.layout.get() != Self::block_layout(layout) {
+            panic!("Bad layout is passed to argument UnsafeLayoutBulkAlloc::dealloc().");
+        }
+
         self.do_dealloc(NonNull::new_unchecked(ptr));
     }
 }
