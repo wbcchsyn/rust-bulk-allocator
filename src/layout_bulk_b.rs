@@ -40,40 +40,32 @@ use std::ptr::{null_mut, NonNull};
 type Link<T> = Option<NonNull<T>>;
 type PointerList = Link<u8>;
 
-/// `UnsafeLayoutBulkAlloc` is an implementation of `GlobalAlloc`.
+/// `UnsafeLayoutBulkAlloc` is an implementation of [`GlobalAlloc`].
 ///
-/// Each instance owns cache for a specific layout, and releases all of them on the drop at once.
+/// Each instance owns a cache for a specific layout and releases all of them on the drop at once.
 ///
-/// Method [`dealloc`] stores the passed pointer into the cache.
-/// i.e. [`dealloc`] does not release the memory immediately.
-/// It is when the object is dropped to free the memory.
+/// Method [`alloc`] dispatches and returns a pointer from the cache, and [`dealloc`] stores the
+/// passed pointer in the cache.
 ///
-/// Method [`alloc`] tries to search the cache at first, and returns the pointer if found;
-/// otherwise, allocates a memory chunk via the backend, stores the chunk into the cache, and
-/// dispatches a memory block from the cache.
+/// See [`alloc`] and [`dealloc`] for the details.
 ///
-/// To cache effectively, each instance assumes that the requested [`Layout`] is always same.
-/// The behavior is undefined if a different [`Layout`] is passed to method [`alloc`] or
-/// [`dealloc`]. (This is why named as `Unsafe`.)
+/// To cache effectively, [`Layout`] must be always same, or panics.
+/// (This is why named "Unsafe".)
+/// Thus, method [`realloc`] always panics.
 ///
-/// # Warnings
-///
-/// Instance drop releases all the memory, and the all the pointers allocated via the instance
-/// will be invalid after then. Accessing such a pointer may lead memory unsafety even if the
-/// pointer itself is not deallocated.
+/// See [`realloc`] for the details.
 ///
 /// # Safety
 ///
-/// The behavior is undefined if the same instance is passed a different [`Layout`] as the
-/// argument.
-///
-/// # Panics
-///
-/// Panics if different [`Layout`] is passed to method [`alloc`] or [`dealloc`] on debug mode.
+/// Instance drop releases all the memory, and all the pointers allocated via the instance
+/// will be invalid after then. Accessing such a pointer may lead to memory unsafety even if the
+/// pointer itself is not deallocated.
 ///
 /// [`Layout`]: std::alloc::Layout
-/// [`alloc`]: #impl-GlobalAlloc-for-UnsafeLayoutBulkAlloc%3CB%3E
-/// [`dealloc`]: #impl-GlobalAlloc-for-UnsafeLayoutBulkAlloc%3CB%3E
+/// [`alloc`]: Self::alloc
+/// [`dealloc`]: Self::dealloc
+/// [`realloc`]: Self::realloc
+/// [`GlobalAlloc`]: std::alloc::GlobalAlloc
 pub struct UnsafeLayoutBulkAlloc<B = System>
 where
     B: GlobalAlloc,
@@ -121,6 +113,26 @@ unsafe impl<B> GlobalAlloc for UnsafeLayoutBulkAlloc<B>
 where
     B: GlobalAlloc,
 {
+    /// `alloc` rounds up the size of `layout` to a multiple of the alignment of that.
+    ///
+    /// This method panics if this is not the first method call and if the rounded-up `layout`
+    /// is different from that of the first call.
+    ///
+    /// If the rounded-up `layout` is OK, `alloc` allocates and caches a memory chunk via the
+    /// backend if the cache is empty, and dispatches a pointer from the cache to return.
+    ///
+    /// [read more](std::alloc::GlobalAlloc::alloc)
+    ///
+    /// # Safety
+    ///
+    /// Instance drop releases all the memory, and all the pointers allocated via the instance
+    /// will be invalid after then. Accessing such a pointer may lead to memory unsafety even if the
+    /// pointer itself is not deallocated.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the method call is not the first time, and if the rounded-up `layout` is
+    /// different from that of the first call.
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if !self.is_initialized() {
             self.layout.set(Self::block_layout(layout));
@@ -130,6 +142,17 @@ where
         self.do_alloc().map(NonNull::as_ptr).unwrap_or(null_mut())
     }
 
+    /// `delloc` rounds up the size of `layout` to a multiple of the alignment of that.
+    ///
+    /// Otherwise, `dealloc` stores the passed pointer into the cache.
+    /// i.e. this method does not release the memory immediately.
+    /// It is when the object is dropped to free the memory.
+    ///
+    /// [read more](std::alloc::GlobalAlloc::dealloc)
+    ///
+    /// # Panics
+    ///
+    /// If the rounded-up `layout` is different from that passed to `alloc`.
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if self.layout.get() != Self::block_layout(layout) {
             panic!("Bad layout is passed to argument UnsafeLayoutBulkAlloc::dealloc().");
@@ -138,6 +161,9 @@ where
         self.do_dealloc(NonNull::new_unchecked(ptr));
     }
 
+    /// Panics if called.
+    ///
+    /// [read more](std::alloc::GlobalAlloc::realloc)
     unsafe fn realloc(&self, _: *mut u8, _: Layout, _: usize) -> *mut u8 {
         panic!("Method UnsafeLayoutBulkAlloc::realloc() is called.");
     }
@@ -486,55 +512,28 @@ mod unsafe_layout_bulk_alloc_tests {
 
 /// `LayoutBulkAlloc` is an implementation of `GlobalAlloc`.
 ///
-/// This struct owns a cache for memory block.
-/// Method [`alloc`] checks whether the required `layout` fits to the cache or not.
+/// This struct owns a cache for a specified layout.
 ///
-/// If the `layout` fits to the cache, [`alloc`] dispatches a memory block from the cache.
-/// (If the cache was empty, it allocates a memory chunk from the backend and make cache at first.)
-/// Otherwise, i.e. the `layout` does not fit to the cache, delegating the request to the backend.
+/// Method [`alloc`] and [`dealloc`] check whether the required [`Layout`] fits the
+/// cache or not.
+/// If the [`Layout`] does not fit the cache, the methods delegate the request to the backend;
+/// otherwise; [`dealloc`] stores the passed pointer into the cache,
+/// and [`alloc`] dispatches and returns a pointer from the cache.
 ///
-/// Method [`dealloc`] caches the passed pointer if possible; otherwise, delegate the request to
-/// the backend. It is when the instance is dropped to free the cached memory.
+/// See [`alloc`] and [`dealloc`] for the details.
 ///
 /// Instance drop releases all the cached memory. All the pointers allocated via the instance will
-/// be invalid after then. Accessing such a pointer may lead memory unsafety even if the pointer
+/// be invalid after then. Accessing such a pointer may lead to memory unsafety even if the pointer
 /// itself is not deallocated.
 ///
-/// # Warnings
+/// # Safety
 ///
 /// The allocated pointers via `LayoutBulkAlloc` will be invalid after the instance is
-/// dropped. Accessing such a pointer may lead memory unsafety evenn if the pointer itself is
+/// dropped. Accessing such a pointer may lead to memory unsafety even if the pointer itself is
 /// not deallocated.
 ///
-/// [`alloc`]: #impl-GlobalAlloc-for-LayoutBulkAlloc<B>
-/// [`dealloc`]: #impl-GlobalAlloc-for-LayoutBulkAlloc<B>
-
-/// `LayoutBulkAlloc` is an implementation of `GlobalAlloc`.
-///
-/// The constractor takes a [`Layout`] as the argument, and each instance owns cache for the
-/// layout.
-///
-/// Method [`dealloc`] checks whether the passed [`Layout`] matches that passed to the constructor
-/// or not.
-/// If they are different, [`dealloc`] delegates the request to the backend; otherwise, it stores
-/// the pointer into the cache. i.e. [`dealloc`] does not release the memory immediately.
-/// It is when the object is dropped to free the cached memory.
-///
-/// Method [`alloc`] checks whether the passed [`Layout`] matches that passed to the constructor
-/// or not.
-/// If they are different, [`alloc`] delegates the request to the backend; otherwise, it tries
-/// to search the cache at first, and returns the pointer if found, or allocates a memory chunk
-/// via the backend, stores the chunk into the cache, and dispatches a memory block from the cache.
-///
-/// # Warnings
-///
-/// Instance drop releases all the memory, and the all the pointers allocated via the instance
-/// will be invalid after then. Accessing such a pointer may lead memory unsafety even if the
-/// pointer itself is not deallocated.
-///
-/// [`Layout`]: std::alloc::Layout
-/// [`alloc`]: #impl-GlobalAlloc-for-LayoutBulkAlloc%3CB%3E
-/// [`dealloc`]: #impl-GlobalAlloc-for-LayoutBulkAlloc%3CB%3E
+/// [`alloc`]: Self::alloc
+/// [`dealloc`]: Self::dealloc
 pub struct LayoutBulkAlloc<B = System>
 where
     B: GlobalAlloc,
@@ -546,6 +545,19 @@ unsafe impl<B> GlobalAlloc for LayoutBulkAlloc<B>
 where
     B: GlobalAlloc,
 {
+    /// `alloc` rounds up the size of `layout` to a multiple of the alignment of that.
+    ///
+    /// If the rounded-up `layout` does not fits the cache, delegates the request to the backend;
+    /// Otherwise, allocates and caches a memory chunk via the backend if the cache is empty,
+    /// and dispatches a pointer from the cache.
+    ///
+    /// [read more](std::alloc::GlobalAlloc::alloc)
+    ///
+    /// # Safety
+    ///
+    /// Instance drop releases all the memory, and all the pointers allocated via the instance
+    /// will be invalid after then. Accessing such a pointer may lead to memory unsafety even if the
+    /// pointer itself is not deallocated.
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if UnsafeLayoutBulkAlloc::<B>::block_layout(layout) == self.backend.layout.get() {
             self.backend
@@ -557,6 +569,14 @@ where
         }
     }
 
+    /// `dealloc` rounds up the size of `layout` to a multiple of the alignment of that.
+    ///
+    /// If the rounded-up `layout` does not fits the cache, delegates the request to the backend;
+    /// otherwise, `dealloc` stores the passed pointer into the cache.
+    /// i.e. this method does not release the memory immediately.
+    /// It is when the object is dropped to free the memory.
+    ///
+    /// [read more](std::alloc::GlobalAlloc::dealloc)
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if UnsafeLayoutBulkAlloc::<B>::block_layout(layout) == self.backend.layout.get() {
             self.backend.do_dealloc(NonNull::new_unchecked(ptr))

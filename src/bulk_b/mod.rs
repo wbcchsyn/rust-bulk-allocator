@@ -59,7 +59,8 @@ type Link<T> = Option<NonNull<T>>;
 ///
 /// Instance drop releases all the memories acquired from the backend.
 /// All the pointers allocated via the instance will be invalid after then.
-/// Accessing such a pointer may lead memory unsafety even the pointer itself is not deallocated.
+/// Accessing such a pointer may lead to memory unsafety even if the pointer itself is not
+/// deallocated.
 ///
 /// # See also
 ///
@@ -128,18 +129,19 @@ where
 {
     /// Method `alloc` delegates the request to the backend if `layout` is too large (i.e. the size is
     /// greater than [`MAX_CACHE_SIZE`] or the align is greater than [`align_of::<usize>()`](align_of).
-    /// Note that usually the alignment of [`Layout`] is less than
-    /// or equals to the value unless the caller dare to enlarge it.)
+    /// Note that usually, the alignment of [`Layout`] is less than
+    /// or equals to the value unless the caller dares to enlarge it.)
     ///
     /// Otherwise, `alloc` searches the cache for a larger or the same size memory in the cache.
     /// If no proper memory is found, it acquires a [`MEMORY_CHUNK_SIZE`] bytes chunk
     /// from the backend allocator at first.
-    /// Then, it takes a pointer from the memory block to return, and caches the rest again.
+    /// Then, it takes a pointer from the memory block to return and caches the rest again.
     ///
     /// # Safety
     ///
     /// All the pointers allocated via the instance will be invalid after the instance drop.
-    /// Accessing such a pointer may lead memory unsafety even the pointer itself is not deallocated.
+    /// Accessing such a pointer may lead to memory unsafety even if the pointer itself is not
+    /// deallocated.
     ///
     /// [read more](std::alloc::GlobalAlloc::alloc)
     ///
@@ -203,7 +205,7 @@ where
     /// Method `dealloc` delegates the request to the backend if `layout` is too large (i.e. the size
     /// is greater than [`MAX_CACHE_SIZE`] or the align is greater
     /// than [`align_of::<usize>()`](align_of).
-    /// Note that usually the alignment of [`Layout`] is less than or equals to the value
+    /// Note that usually, the alignment of [`Layout`] is less than or equals to the value
     /// unless the caller dare to enlarge it.)
     ///
     /// Otherwise, `dealloc` stores the passed pointer into the proper cache.
@@ -212,7 +214,8 @@ where
     /// # Safety
     ///
     /// All the pointers allocated via the instance will be invalid after the instance drop.
-    /// Accessing such a pointer may lead memory unsafety even the pointer itself is not deallocated.
+    /// Accessing such a pointer may lead to memory unsafety even if the pointer itself is not
+    /// deallocated.
     ///
     /// [read more](std::alloc::GlobalAlloc::dealloc)
     ///
