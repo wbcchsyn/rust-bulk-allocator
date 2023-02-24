@@ -124,8 +124,8 @@ where
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if !self.is_initialized() {
             self.layout.set(Self::block_layout(layout));
-        } else {
-            debug_assert_eq!(self.layout.get(), Self::block_layout(layout));
+        } else if self.layout.get() != Self::block_layout(layout) {
+            panic!("Bad layout is passed to argument UnsafeLayoutBulkAlloc::alloc().");
         }
         self.do_alloc().map(NonNull::as_ptr).unwrap_or(null_mut())
     }
