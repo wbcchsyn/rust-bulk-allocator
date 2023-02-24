@@ -137,6 +137,10 @@ where
 
         self.do_dealloc(NonNull::new_unchecked(ptr));
     }
+
+    unsafe fn realloc(&self, _: *mut u8, _: Layout, _: usize) -> *mut u8 {
+        panic!("Method UnsafeLayoutBulkAlloc::realloc() is called.");
+    }
 }
 
 impl<B> UnsafeLayoutBulkAlloc<B>
