@@ -10,7 +10,7 @@ license = "LGPL-3.0-or-later OR Apache-2.0"
 readme = "README.md"
 
 keywords = ["alloc", "allocator", "memory", "GlobalAlloc"]
-documentation = "https://wbcchsyn.github.io/rust-bulk-allocator/bulk_allocator/index.html"
+documentation = "https://docs.rs/bulk_allocator/0.4.0/bulk_allocator/"
 
 categories = ["memory-management"]
 
