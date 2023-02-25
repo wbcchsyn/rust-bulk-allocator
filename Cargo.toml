@@ -4,7 +4,7 @@ version = "0.4.0"
 authors = ["Yoshida Shin <wbcchsyn@gmail.com>"]
 edition = "2021"
 
-description = "Implementations for AllocRef. to pool allocated memory and to release them on the destruction."
+description = "Implementations of GlobalAlloc holding memory cache."
 repository = "https://github.com/wbcchsyn/rust-bulk-allocator"
 license = "LGPL-3.0-or-later OR Apache-2.0"
 readme = "README.md"
