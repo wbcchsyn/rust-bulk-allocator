@@ -56,4 +56,4 @@ pub use layout_bulk_b::{LayoutBulkAlloc, UnsafeLayoutBulkAlloc};
 /// if no cache is.
 /// Note that if too large layout is requested, it may exceed this value that this crate
 /// acquires via the backend.
-pub const MEMORY_CHUNK_SIZE: usize = 16384; // 16 KB
+pub const MEMORY_CHUNK_SIZE: usize = 64 * 1024;
