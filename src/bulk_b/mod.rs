@@ -41,7 +41,11 @@ use std::mem::{align_of, size_of};
 use std::ptr::{null_mut, NonNull};
 
 type Link<T> = Option<NonNull<T>>;
-const ALIGN: usize = align_of::<usize>();
+const ALIGN: usize = if 8 < align_of::<usize>() {
+    align_of::<usize>()
+} else {
+    8
+};
 
 /// `BulkAlloc` is an implementation of [`GlobalAlloc`](`std::alloc::GlobalAlloc`)
 /// holding memory cache.
