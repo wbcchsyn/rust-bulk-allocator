@@ -31,11 +31,11 @@
 
 use crate::rb_tree::{Color, Direction, RBTree, TreeBucket};
 use std::cmp::Ordering;
-use std::mem::{align_of, size_of};
+use std::mem::size_of;
 use std::ptr::NonNull;
 
 type Link<T> = Option<NonNull<T>>;
-const ALIGN: usize = align_of::<Bucket>();
+use super::ALIGN;
 pub const MIN_CACHE_SIZE: usize = size_of::<Bucket>();
 
 struct Bucket {
