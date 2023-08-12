@@ -31,3 +31,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 ## 0.4.1 - 2023-02-25
 ### Changed
 - Document
+
+## 0.5.0 - 2023-08-14
+### Changed
+- Improve struct BulkAlloc
+- The value of constant MEMORY\_CHANK\_SIZE
