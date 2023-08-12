@@ -38,6 +38,13 @@ type Link<T> = Option<NonNull<T>>;
 use super::ALIGN;
 pub const MIN_CACHE_SIZE: usize = size_of::<Bucket>();
 
+#[cfg(debug_assertions)]
+const MSB: usize = 1 << (size_of::<usize>() * 8 - 1);
+
+/// The 4 least significant bits of each pointer is used for the color and the size.
+/// This is OK because
+/// - Rust does not support pointers that the most significant bit is 1.
+/// - The alignment of the pointer is 8 bytes at least, so the 3 least significant bits are 0.
 struct Bucket {
     left_order_: usize,
     right_order_: usize,
@@ -52,20 +59,28 @@ struct Bucket {
 
 impl Bucket {
     fn left_order(&self) -> Link<Self> {
-        let ptr = self.left_order_ as *mut Self;
-        NonNull::new(ptr)
+        let ptr = (self.left_order_ >> 1) & !0x07;
+        NonNull::new(ptr as *mut Self)
     }
     fn set_left_order(&mut self, ptr: Link<Self>) {
         let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
-        self.left_order_ = ptr;
+        debug_assert!(ptr & 0x07 == 0);
+        debug_assert!(ptr & MSB == 0);
+
+        self.left_order_ &= 0x0f;
+        self.left_order_ |= ptr << 1;
     }
     fn right_order(&self) -> Link<Self> {
-        let ptr = self.right_order_ as *mut Self;
-        NonNull::new(ptr)
+        let ptr = (self.right_order_ >> 1) & !0x07;
+        NonNull::new(ptr as *mut Self)
     }
     fn set_right_order(&mut self, ptr: Link<Self>) {
         let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
-        self.right_order_ = ptr;
+        debug_assert!(ptr & 0x07 == 0);
+        debug_assert!(ptr & MSB == 0);
+
+        self.right_order_ &= 0x0f;
+        self.right_order_ |= ptr << 1;
     }
     fn order_color(&self) -> Color {
         self.order_color_
@@ -75,20 +90,28 @@ impl Bucket {
     }
 
     fn left_size(&self) -> Link<Self> {
-        let ptr = self.left_size_ as *mut Self;
-        NonNull::new(ptr)
+        let ptr = (self.left_size_ >> 1) & !0x07;
+        NonNull::new(ptr as *mut Self)
     }
     fn set_left_size(&mut self, ptr: Link<Self>) {
         let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
-        self.left_size_ = ptr;
+        debug_assert!(ptr & 0x07 == 0);
+        debug_assert!(ptr & MSB == 0);
+
+        self.left_size_ &= 0x0f;
+        self.left_size_ |= ptr << 1;
     }
     fn right_size(&self) -> Link<Self> {
-        let ptr = self.right_size_ as *mut Self;
-        NonNull::new(ptr)
+        let ptr = (self.right_size_ >> 1) & !0x07;
+        NonNull::new(ptr as *mut Self)
     }
     fn set_right_size(&mut self, ptr: Link<Self>) {
         let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
-        self.right_size_ = ptr;
+        debug_assert!(ptr & 0x07 == 0);
+        debug_assert!(ptr & MSB == 0);
+
+        self.right_size_ &= 0x0f;
+        self.right_size_ |= ptr << 1;
     }
     fn size_color(&self) -> Color {
         self.size_color_
