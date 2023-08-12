@@ -53,7 +53,6 @@ struct Bucket {
     right_size_: usize,
 
     size_: u16,
-    order_color_: Color,
     size_color_: Color,
 }
 
@@ -86,14 +85,6 @@ impl Bucket {
         self.right_order_ |= ptr << 1;
     }
 
-    fn order_color(&self) -> Color {
-        self.order_color_
-    }
-
-    fn set_order_color(&mut self, color: Color) {
-        self.order_color_ = color;
-    }
-
     fn left_size(&self) -> Link<Self> {
         let ptr = (self.left_size_ >> 1) & !0x07;
         NonNull::new(ptr as *mut Self)
@@ -120,6 +111,23 @@ impl Bucket {
 
         self.right_size_ &= 0x0f;
         self.right_size_ |= ptr << 1;
+    }
+
+    /// Read the 0x04 bit of `self.left_order_`.
+    fn order_color(&self) -> Color {
+        if self.left_order_ & 0x04 == 0 {
+            Color::Black
+        } else {
+            Color::Red
+        }
+    }
+
+    /// Update the 0x04 bit of `self.left_order_`.
+    fn set_order_color(&mut self, color: Color) {
+        match color {
+            Color::Black => self.left_order_ &= !0x04,
+            Color::Red => self.left_order_ |= 0x04,
+        }
     }
 
     fn size_color(&self) -> Color {
