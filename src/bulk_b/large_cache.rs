@@ -39,11 +39,11 @@ use super::ALIGN;
 pub const MIN_CACHE_SIZE: usize = size_of::<Bucket>();
 
 struct Bucket {
-    left_order_: Link<Self>,
-    right_order_: Link<Self>,
+    left_order_: usize,
+    right_order_: usize,
 
-    left_size_: Link<Self>,
-    right_size_: Link<Self>,
+    left_size_: usize,
+    right_size_: usize,
 
     size_: u16,
     order_color_: Color,
@@ -52,15 +52,19 @@ struct Bucket {
 
 impl Bucket {
     fn left_order(&self) -> Link<Self> {
-        self.left_order_
+        let ptr = self.left_order_ as *mut Self;
+        NonNull::new(ptr)
     }
     fn set_left_order(&mut self, ptr: Link<Self>) {
+        let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
         self.left_order_ = ptr;
     }
     fn right_order(&self) -> Link<Self> {
-        self.right_order_
+        let ptr = self.right_order_ as *mut Self;
+        NonNull::new(ptr)
     }
     fn set_right_order(&mut self, ptr: Link<Self>) {
+        let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
         self.right_order_ = ptr;
     }
     fn order_color(&self) -> Color {
@@ -71,15 +75,19 @@ impl Bucket {
     }
 
     fn left_size(&self) -> Link<Self> {
-        self.left_size_
+        let ptr = self.left_size_ as *mut Self;
+        NonNull::new(ptr)
     }
     fn set_left_size(&mut self, ptr: Link<Self>) {
+        let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
         self.left_size_ = ptr;
     }
     fn right_size(&self) -> Link<Self> {
-        self.right_size_
+        let ptr = self.right_size_ as *mut Self;
+        NonNull::new(ptr)
     }
     fn set_right_size(&mut self, ptr: Link<Self>) {
+        let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
         self.right_size_ = ptr;
     }
     fn size_color(&self) -> Color {
