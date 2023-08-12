@@ -62,6 +62,7 @@ impl Bucket {
         let ptr = (self.left_order_ >> 1) & !0x07;
         NonNull::new(ptr as *mut Self)
     }
+
     fn set_left_order(&mut self, ptr: Link<Self>) {
         let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
         debug_assert!(ptr & 0x07 == 0);
@@ -70,10 +71,12 @@ impl Bucket {
         self.left_order_ &= 0x0f;
         self.left_order_ |= ptr << 1;
     }
+
     fn right_order(&self) -> Link<Self> {
         let ptr = (self.right_order_ >> 1) & !0x07;
         NonNull::new(ptr as *mut Self)
     }
+
     fn set_right_order(&mut self, ptr: Link<Self>) {
         let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
         debug_assert!(ptr & 0x07 == 0);
@@ -82,9 +85,11 @@ impl Bucket {
         self.right_order_ &= 0x0f;
         self.right_order_ |= ptr << 1;
     }
+
     fn order_color(&self) -> Color {
         self.order_color_
     }
+
     fn set_order_color(&mut self, color: Color) {
         self.order_color_ = color;
     }
@@ -93,6 +98,7 @@ impl Bucket {
         let ptr = (self.left_size_ >> 1) & !0x07;
         NonNull::new(ptr as *mut Self)
     }
+
     fn set_left_size(&mut self, ptr: Link<Self>) {
         let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
         debug_assert!(ptr & 0x07 == 0);
@@ -101,10 +107,12 @@ impl Bucket {
         self.left_size_ &= 0x0f;
         self.left_size_ |= ptr << 1;
     }
+
     fn right_size(&self) -> Link<Self> {
         let ptr = (self.right_size_ >> 1) & !0x07;
         NonNull::new(ptr as *mut Self)
     }
+
     fn set_right_size(&mut self, ptr: Link<Self>) {
         let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
         debug_assert!(ptr & 0x07 == 0);
@@ -113,9 +121,11 @@ impl Bucket {
         self.right_size_ &= 0x0f;
         self.right_size_ |= ptr << 1;
     }
+
     fn size_color(&self) -> Color {
         self.size_color_
     }
+
     fn set_size_color(&mut self, color: Color) {
         self.size_color_ = color;
     }
@@ -123,6 +133,7 @@ impl Bucket {
     fn size(&self) -> usize {
         self.size_ as usize
     }
+
     fn set_size(&mut self, size: usize) {
         debug_assert!(size <= u16::MAX as usize);
         self.size_ = size as u16;
