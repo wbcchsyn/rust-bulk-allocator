@@ -16,3 +16,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 ### Updated
 - Delete most codes and quit to enable nightly features.
 - Give up to implementing `AllocRef` , and implements `GlobalAlloc` instead.
+
+## 0.4.0 - 2023-02-24
+### Added
+- struct BulkAlloc
+- struct LayoutBulkAlloc
+- struct UnsafeLayoutBulkAlloc
+### Removed
+- struct BulkA
+- struct LayoutBulkA
+- struct UnBulkA
+- struct UnLayoutBulkA
+
+## 0.4.1 - 2023-02-25
+### Changed
+- Document
