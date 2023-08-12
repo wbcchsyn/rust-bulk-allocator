@@ -51,8 +51,6 @@ struct Bucket {
 
     left_size_: usize,
     right_size_: usize,
-
-    size_: u16,
 }
 
 impl Bucket {
@@ -146,13 +144,30 @@ impl Bucket {
         }
     }
 
+    /// Read the 0x01 bit of `self.left_order_`, 0x0f bit of `self.right_order_`,
+    /// 0x0f bit of `self.left_size_` and 0x0f bit of `self.right_size_`.
     fn size(&self) -> usize {
-        self.size_ as usize
+        let a = (self.left_order_ & 0x01) << 15;
+        let b = (self.right_order_ & 0x0f) << 11;
+        let c = (self.left_size_ & 0x0f) << 7;
+        let d = (self.right_size_ & 0x0f) << 3;
+        a + b + c + d
     }
 
+    /// Update the 0x01 bit of `self.left_order_`, 0x0f bit of `self.right_order_`,
+    /// 0x0f bit of `self.left_size_` and 0x0f bit of `self.right_size_`.
     fn set_size(&mut self, size: usize) {
         debug_assert!(size <= u16::MAX as usize);
-        self.size_ = size as u16;
+        debug_assert!(size & 0x07 == 0);
+
+        self.left_order_ &= !0x01;
+        self.left_order_ |= size >> 15;
+        self.right_order_ &= !0x0f;
+        self.right_order_ |= (size >> 11) & 0x0f;
+        self.left_size_ &= !0x0f;
+        self.left_size_ |= (size >> 7) & 0x0f;
+        self.right_size_ &= !0x0f;
+        self.right_size_ |= (size >> 3) & 0x0f;
     }
 }
 
