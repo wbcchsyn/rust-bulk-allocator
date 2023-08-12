@@ -29,8 +29,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TODO: Finish this module and replace into layout_bulk_a
-
 use crate::MEMORY_CHUNK_SIZE;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
