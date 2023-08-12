@@ -40,16 +40,18 @@ type PointerList = Link<u8>;
 
 /// `UnsafeLayoutBulkAlloc` is an implementation of [`GlobalAlloc`].
 ///
-/// Each instance owns a cache for a specific layout and releases all of them on the drop at once.
+/// Each instance manages a cache for a specific layout and releases all of them on the drop at
+/// once.
 ///
-/// Method [`alloc`] dispatches and returns a pointer from the cache, and [`dealloc`] stores the
+/// Method [`alloc`] dispatches and returns a pointer from the cache, while [`dealloc`] stores the
 /// passed pointer in the cache.
 ///
 /// See [`alloc`] and [`dealloc`] for the details.
 ///
+/// In order to ensure effective caching, it is imperative that [`Layout`] remains consistently
+/// the same, or else panics. (This is why the term "Unsafe" is employed.)
 /// To cache effectively, [`Layout`] must be always same, or panics.
-/// (This is why named "Unsafe".)
-/// Thus, method [`realloc`] always panics.
+/// Consequently, method [`realloc`] always panics.
 ///
 /// See [`realloc`] for the details.
 ///
