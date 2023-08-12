@@ -31,26 +31,145 @@
 
 use crate::rb_tree::{Color, Direction, RBTree, TreeBucket};
 use std::cmp::Ordering;
-use std::mem::{align_of, size_of};
+use std::mem::size_of;
 use std::ptr::NonNull;
 
 type Link<T> = Option<NonNull<T>>;
-const ALIGN: usize = align_of::<Bucket>();
+use super::ALIGN;
 pub const MIN_CACHE_SIZE: usize = size_of::<Bucket>();
 
+#[cfg(debug_assertions)]
+const MSB: usize = 1 << (size_of::<usize>() * 8 - 1);
+
+/// The 4 least significant bits of each pointer is used for the color and the size.
+/// This is OK because
+/// - Rust does not support pointers that the most significant bit is 1.
+/// - The alignment of the pointer is 8 bytes at least, so the 3 least significant bits are 0.
 struct Bucket {
-    left_order: Link<Self>,
-    right_order: Link<Self>,
+    left_order_: usize,
+    right_order_: usize,
 
-    left_size: Link<Self>,
-    right_size: Link<Self>,
-
-    size: u16,
-    order_color: Color,
-    size_color: Color,
+    left_size_: usize,
+    right_size_: usize,
 }
 
-impl Bucket {}
+impl Bucket {
+    fn left_order(&self) -> Link<Self> {
+        let ptr = (self.left_order_ >> 1) & !0x07;
+        NonNull::new(ptr as *mut Self)
+    }
+
+    fn set_left_order(&mut self, ptr: Link<Self>) {
+        let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
+        debug_assert!(ptr & 0x07 == 0);
+        debug_assert!(ptr & MSB == 0);
+
+        self.left_order_ &= 0x0f;
+        self.left_order_ |= ptr << 1;
+    }
+
+    fn right_order(&self) -> Link<Self> {
+        let ptr = (self.right_order_ >> 1) & !0x07;
+        NonNull::new(ptr as *mut Self)
+    }
+
+    fn set_right_order(&mut self, ptr: Link<Self>) {
+        let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
+        debug_assert!(ptr & 0x07 == 0);
+        debug_assert!(ptr & MSB == 0);
+
+        self.right_order_ &= 0x0f;
+        self.right_order_ |= ptr << 1;
+    }
+
+    fn left_size(&self) -> Link<Self> {
+        let ptr = (self.left_size_ >> 1) & !0x07;
+        NonNull::new(ptr as *mut Self)
+    }
+
+    fn set_left_size(&mut self, ptr: Link<Self>) {
+        let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
+        debug_assert!(ptr & 0x07 == 0);
+        debug_assert!(ptr & MSB == 0);
+
+        self.left_size_ &= 0x0f;
+        self.left_size_ |= ptr << 1;
+    }
+
+    fn right_size(&self) -> Link<Self> {
+        let ptr = (self.right_size_ >> 1) & !0x07;
+        NonNull::new(ptr as *mut Self)
+    }
+
+    fn set_right_size(&mut self, ptr: Link<Self>) {
+        let ptr = ptr.map_or(0, |ptr| ptr.as_ptr() as usize);
+        debug_assert!(ptr & 0x07 == 0);
+        debug_assert!(ptr & MSB == 0);
+
+        self.right_size_ &= 0x0f;
+        self.right_size_ |= ptr << 1;
+    }
+
+    /// Read the 0x04 bit of `self.left_order_`.
+    fn order_color(&self) -> Color {
+        if self.left_order_ & 0x04 == 0 {
+            Color::Black
+        } else {
+            Color::Red
+        }
+    }
+
+    /// Update the 0x04 bit of `self.left_order_`.
+    fn set_order_color(&mut self, color: Color) {
+        match color {
+            Color::Black => self.left_order_ &= !0x04,
+            Color::Red => self.left_order_ |= 0x04,
+        }
+    }
+
+    /// Read the 0x02 bit of `self.left_order_`.
+    fn size_color(&self) -> Color {
+        if self.left_order_ & 0x02 == 0 {
+            Color::Black
+        } else {
+            Color::Red
+        }
+    }
+
+    /// Update the 0x02 bit of `self.left_order_`.
+    fn set_size_color(&mut self, color: Color) {
+        match color {
+            Color::Black => self.left_order_ &= !0x02,
+            Color::Red => self.left_order_ |= 0x02,
+        }
+    }
+
+    /// Read the 0x01 bit of `self.left_order_`, 0x0f bit of `self.right_order_`,
+    /// 0x0f bit of `self.left_size_` and 0x0f bit of `self.right_size_`.
+    fn size(&self) -> usize {
+        let a = (self.left_order_ & 0x01) << 15;
+        let b = (self.right_order_ & 0x0f) << 11;
+        let c = (self.left_size_ & 0x0f) << 7;
+        let d = (self.right_size_ & 0x0f) << 3;
+        a + b + c + d
+    }
+
+    /// Update the 0x01 bit of `self.left_order_`, 0x0f bit of `self.right_order_`,
+    /// 0x0f bit of `self.left_size_` and 0x0f bit of `self.right_size_`.
+    fn set_size(&mut self, size: usize) {
+        debug_assert!(size <= u16::MAX as usize);
+        debug_assert!(size & 0x07 == 0);
+
+        self.left_order_ &= !0x01;
+        self.left_order_ |= size >> 15;
+        self.right_order_ &= !0x0f;
+        self.right_order_ |= (size >> 11) & 0x0f;
+        self.left_size_ &= !0x0f;
+        self.left_size_ |= (size >> 7) & 0x0f;
+        self.right_size_ &= !0x0f;
+        self.right_size_ |= (size >> 3) & 0x0f;
+    }
+}
 
 struct SizeBucket(Bucket);
 
@@ -61,11 +180,11 @@ impl SizeBucket {
         debug_assert!(size % ALIGN == 0);
 
         let this: &mut Self = unsafe { ptr.cast().as_mut() };
-        this.0.size = size as u16;
+        this.0.set_size(size);
     }
 
     pub fn size(&self) -> usize {
-        self.0.size as usize
+        self.0.size()
     }
 }
 
@@ -93,24 +212,24 @@ impl PartialEq<Bucket> for SizeBucket {
 
 impl PartialOrd<Self> for SizeBucket {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.0.size == other.0.size {
+        if self.0.size() == other.0.size() {
             let this: *const SizeBucket = self;
             let other: *const SizeBucket = other;
             this.partial_cmp(&other)
         } else {
-            self.0.size.partial_cmp(&other.0.size)
+            self.0.size().partial_cmp(&other.0.size())
         }
     }
 }
 
 impl Ord for SizeBucket {
     fn cmp(&self, other: &Self) -> Ordering {
-        if self.0.size == other.0.size {
+        if self.0.size() == other.0.size() {
             let this: *const SizeBucket = self;
             let other: *const SizeBucket = other;
             this.cmp(&other)
         } else {
-            self.0.size.cmp(&other.0.size)
+            self.0.size().cmp(&other.0.size())
         }
     }
 }
@@ -131,24 +250,24 @@ impl PartialOrd<Bucket> for SizeBucket {
 impl TreeBucket for SizeBucket {
     fn child(&self, direction: Direction) -> Link<Self> {
         match direction {
-            Direction::Left => self.0.left_size.map(NonNull::cast),
-            Direction::Right => self.0.right_size.map(NonNull::cast),
+            Direction::Left => self.0.left_size().map(NonNull::cast),
+            Direction::Right => self.0.right_size().map(NonNull::cast),
         }
     }
 
     fn set_child(&mut self, child: Link<Self>, direction: Direction) {
         match direction {
-            Direction::Left => self.0.left_size = child.map(NonNull::cast),
-            Direction::Right => self.0.right_size = child.map(NonNull::cast),
+            Direction::Left => self.0.set_left_size(child.map(NonNull::cast)),
+            Direction::Right => self.0.set_right_size(child.map(NonNull::cast)),
         }
     }
 
     fn color(&self) -> Color {
-        self.0.size_color
+        self.0.size_color()
     }
 
     fn set_color(&mut self, color: Color) {
-        self.0.size_color = color
+        self.0.set_size_color(color)
     }
 }
 
@@ -160,12 +279,12 @@ impl OrderBucket {
         debug_assert!(_size <= u16::MAX as usize);
         debug_assert!(_size % ALIGN == 0);
 
-        let _this: &mut Self = unsafe { ptr.cast().as_mut() };
+        let _this: &Self = unsafe { ptr.cast().as_ref() };
         debug_assert!(_this.size() == _size);
     }
 
     pub fn size(&self) -> usize {
-        self.0.size as usize
+        self.0.size()
     }
 }
 
@@ -231,24 +350,24 @@ impl Ord for OrderBucket {
 impl TreeBucket for OrderBucket {
     fn child(&self, direction: Direction) -> Link<Self> {
         match direction {
-            Direction::Left => self.0.left_order.map(NonNull::cast),
-            Direction::Right => self.0.right_order.map(NonNull::cast),
+            Direction::Left => self.0.left_order().map(NonNull::cast),
+            Direction::Right => self.0.right_order().map(NonNull::cast),
         }
     }
 
     fn set_child(&mut self, child: Link<Self>, direction: Direction) {
         match direction {
-            Direction::Left => self.0.left_order = child.map(NonNull::cast),
-            Direction::Right => self.0.right_order = child.map(NonNull::cast),
+            Direction::Left => self.0.set_left_order(child.map(NonNull::cast)),
+            Direction::Right => self.0.set_right_order(child.map(NonNull::cast)),
         }
     }
 
     fn color(&self) -> Color {
-        self.0.order_color
+        self.0.order_color()
     }
 
     fn set_color(&mut self, color: Color) {
-        self.0.order_color = color
+        self.0.set_order_color(color)
     }
 }
 

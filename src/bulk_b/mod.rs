@@ -41,6 +41,11 @@ use std::mem::{align_of, size_of};
 use std::ptr::{null_mut, NonNull};
 
 type Link<T> = Option<NonNull<T>>;
+const ALIGN: usize = if 8 < align_of::<usize>() {
+    align_of::<usize>()
+} else {
+    8
+};
 
 /// `BulkAlloc` is an implementation of [`GlobalAlloc`](`std::alloc::GlobalAlloc`)
 /// holding memory cache.
@@ -85,7 +90,6 @@ where
 {
     /// The max byte size that `BulkAlloc` can cache.
     pub const MAX_CACHE_SIZE: usize = MEMORY_CHUNK_SIZE - size_of::<Link<u8>>();
-    const ALIGN: usize = align_of::<usize>();
 }
 
 impl<B> Drop for BulkAlloc<B>
@@ -96,7 +100,7 @@ where
         let mut it = self.to_free.get();
 
         unsafe {
-            let layout = Layout::from_size_align(MEMORY_CHUNK_SIZE, Self::ALIGN).unwrap();
+            let layout = Layout::from_size_align(MEMORY_CHUNK_SIZE, ALIGN).unwrap();
 
             while let Some(ptr) = it {
                 it = NonNull::new(*ptr.cast().as_ref());
@@ -151,12 +155,12 @@ where
     /// [`MEMORY_CHUNK_SIZE`]: crate::MEMORY_CHUNK_SIZE
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // Delegate the request if layout is too large.
-        if Self::MAX_CACHE_SIZE < layout.size() || Self::ALIGN < layout.align() {
+        if Self::MAX_CACHE_SIZE < layout.size() || ALIGN < layout.align() {
             return self.backend.alloc(layout);
         }
 
         // Round up size.
-        let request_size = (layout.size() + Self::ALIGN - 1) / Self::ALIGN * Self::ALIGN;
+        let request_size = (layout.size() + ALIGN - 1) / ALIGN * ALIGN;
 
         let small_cache = &mut *self.small_cache.get();
         let large_cache = &mut *self.large_cache.get();
@@ -168,7 +172,7 @@ where
         } else if let Some((ptr, size)) = large_cache.alloc(request_size) {
             (ptr, size)
         } else {
-            let layout = Layout::from_size_align(MEMORY_CHUNK_SIZE, Self::ALIGN).unwrap();
+            let layout = Layout::from_size_align(MEMORY_CHUNK_SIZE, ALIGN).unwrap();
             let ptr = self.backend.alloc(layout);
 
             if ptr.is_null() {
@@ -189,7 +193,7 @@ where
             }
         };
 
-        debug_assert!(alloc_size % Self::ALIGN == 0);
+        debug_assert!(alloc_size % ALIGN == 0);
 
         // Take the end of the memory block as the return value, and cache the rest again if necessary.
         let rest_size = alloc_size - request_size;
@@ -224,14 +228,14 @@ where
     /// [`align_of`]: std::mem::align_of
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         // Delegate the request if layout is too large.
-        if Self::MAX_CACHE_SIZE < layout.size() || Self::ALIGN < layout.align() {
+        if Self::MAX_CACHE_SIZE < layout.size() || ALIGN < layout.align() {
             self.backend.dealloc(ptr, layout);
             return;
         }
 
         // Round up size.
-        let size = (layout.size() + Self::ALIGN - 1) / Self::ALIGN * Self::ALIGN;
-        debug_assert!(ptr as usize % Self::ALIGN == 0);
+        let size = (layout.size() + ALIGN - 1) / ALIGN * ALIGN;
+        debug_assert!(ptr as usize % ALIGN == 0);
 
         // Cache ptr.
         let small_cache = &mut *self.small_cache.get();
@@ -258,7 +262,7 @@ mod tests {
         // Large align
         for size in (1..64).chain([Alloc::MAX_CACHE_SIZE, Alloc::MAX_CACHE_SIZE + 1]) {
             unsafe {
-                let align = 2 * Alloc::ALIGN;
+                let align = 2 * ALIGN;
                 let layout = Layout::from_size_align(size, align).unwrap();
 
                 let ptr = alloc.alloc(layout);
@@ -272,7 +276,7 @@ mod tests {
 
         // Large size
         let mut align = 1;
-        while align <= Alloc::ALIGN {
+        while align <= ALIGN {
             unsafe {
                 let size = Alloc::MAX_CACHE_SIZE + 1;
                 let layout = Layout::from_size_align(size, align).unwrap();
@@ -299,7 +303,7 @@ mod tests {
                 let mut align = 1;
                 let mut pointers = Vec::new();
 
-                while align <= Alloc::ALIGN {
+                while align <= ALIGN {
                     for size in (0..1024).chain([Alloc::MAX_CACHE_SIZE]) {
                         let layout = Layout::from_size_align(size, align).unwrap();
                         let ptr = alloc.alloc(layout);

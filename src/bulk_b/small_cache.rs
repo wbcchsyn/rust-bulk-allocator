@@ -30,20 +30,19 @@
 // limitations under the License.
 
 use super::large_cache;
-use std::mem::align_of;
 use std::ptr::{null_mut, NonNull};
 
 type Link<T> = Option<NonNull<T>>;
 
-const ALIGN: usize = align_of::<Link<u8>>();
-const MAX_CACHE_SIZE: usize = INNER_CACEH_SIZE * ALIGN;
-const INNER_CACEH_SIZE: usize = (large_cache::MIN_CACHE_SIZE - 1) / ALIGN;
+const ALIGN: usize = super::ALIGN;
+const MAX_CACHE_SIZE: usize = INNER_CACHE_COUNT * ALIGN;
+const INNER_CACHE_COUNT: usize = (large_cache::MIN_CACHE_SIZE - 1) / ALIGN;
 
-pub struct SmallCache([Link<u8>; INNER_CACEH_SIZE]);
+pub struct SmallCache([Link<u8>; INNER_CACHE_COUNT]);
 
 impl SmallCache {
     pub const fn new() -> Self {
-        Self([None; INNER_CACEH_SIZE])
+        Self([None; INNER_CACHE_COUNT])
     }
 
     pub fn alloc(&mut self, size: usize) -> Option<(NonNull<u8>, usize)> {
@@ -54,7 +53,7 @@ impl SmallCache {
             Some((ptr.cast(), 0))
         } else {
             let index = (size / ALIGN) - 1;
-            for i in index..INNER_CACEH_SIZE {
+            for i in index..INNER_CACHE_COUNT {
                 if let Some(ptr) = self.0[i] {
                     self.0[i] = unsafe { NonNull::new(*ptr.cast().as_ref()) };
                     return Some((ptr, (i + 1) * ALIGN));
