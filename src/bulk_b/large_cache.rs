@@ -53,7 +53,6 @@ struct Bucket {
     right_size_: usize,
 
     size_: u16,
-    size_color_: Color,
 }
 
 impl Bucket {
@@ -130,12 +129,21 @@ impl Bucket {
         }
     }
 
+    /// Read the 0x02 bit of `self.left_order_`.
     fn size_color(&self) -> Color {
-        self.size_color_
+        if self.left_order_ & 0x02 == 0 {
+            Color::Black
+        } else {
+            Color::Red
+        }
     }
 
+    /// Update the 0x02 bit of `self.left_order_`.
     fn set_size_color(&mut self, color: Color) {
-        self.size_color_ = color;
+        match color {
+            Color::Black => self.left_order_ &= !0x02,
+            Color::Red => self.left_order_ |= 0x02,
+        }
     }
 
     fn size(&self) -> usize {
