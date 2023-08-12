@@ -39,18 +39,64 @@ const ALIGN: usize = align_of::<Bucket>();
 pub const MIN_CACHE_SIZE: usize = size_of::<Bucket>();
 
 struct Bucket {
-    left_order: Link<Self>,
-    right_order: Link<Self>,
+    left_order_: Link<Self>,
+    right_order_: Link<Self>,
 
-    left_size: Link<Self>,
-    right_size: Link<Self>,
+    left_size_: Link<Self>,
+    right_size_: Link<Self>,
 
-    size: u16,
-    order_color: Color,
-    size_color: Color,
+    size_: u16,
+    order_color_: Color,
+    size_color_: Color,
 }
 
-impl Bucket {}
+impl Bucket {
+    fn left_order(&self) -> Link<Self> {
+        self.left_order_
+    }
+    fn set_left_order(&mut self, ptr: Link<Self>) {
+        self.left_order_ = ptr;
+    }
+    fn right_order(&self) -> Link<Self> {
+        self.right_order_
+    }
+    fn set_right_order(&mut self, ptr: Link<Self>) {
+        self.right_order_ = ptr;
+    }
+    fn order_color(&self) -> Color {
+        self.order_color_
+    }
+    fn set_order_color(&mut self, color: Color) {
+        self.order_color_ = color;
+    }
+
+    fn left_size(&self) -> Link<Self> {
+        self.left_size_
+    }
+    fn set_left_size(&mut self, ptr: Link<Self>) {
+        self.left_size_ = ptr;
+    }
+    fn right_size(&self) -> Link<Self> {
+        self.right_size_
+    }
+    fn set_right_size(&mut self, ptr: Link<Self>) {
+        self.right_size_ = ptr;
+    }
+    fn size_color(&self) -> Color {
+        self.size_color_
+    }
+    fn set_size_color(&mut self, color: Color) {
+        self.size_color_ = color;
+    }
+
+    fn size(&self) -> usize {
+        self.size_ as usize
+    }
+    fn set_size(&mut self, size: usize) {
+        debug_assert!(size <= u16::MAX as usize);
+        self.size_ = size as u16;
+    }
+}
 
 struct SizeBucket(Bucket);
 
@@ -61,11 +107,11 @@ impl SizeBucket {
         debug_assert!(size % ALIGN == 0);
 
         let this: &mut Self = unsafe { ptr.cast().as_mut() };
-        this.0.size = size as u16;
+        this.0.set_size(size);
     }
 
     pub fn size(&self) -> usize {
-        self.0.size as usize
+        self.0.size()
     }
 }
 
@@ -93,24 +139,24 @@ impl PartialEq<Bucket> for SizeBucket {
 
 impl PartialOrd<Self> for SizeBucket {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.0.size == other.0.size {
+        if self.0.size() == other.0.size() {
             let this: *const SizeBucket = self;
             let other: *const SizeBucket = other;
             this.partial_cmp(&other)
         } else {
-            self.0.size.partial_cmp(&other.0.size)
+            self.0.size().partial_cmp(&other.0.size())
         }
     }
 }
 
 impl Ord for SizeBucket {
     fn cmp(&self, other: &Self) -> Ordering {
-        if self.0.size == other.0.size {
+        if self.0.size() == other.0.size() {
             let this: *const SizeBucket = self;
             let other: *const SizeBucket = other;
             this.cmp(&other)
         } else {
-            self.0.size.cmp(&other.0.size)
+            self.0.size().cmp(&other.0.size())
         }
     }
 }
@@ -131,24 +177,24 @@ impl PartialOrd<Bucket> for SizeBucket {
 impl TreeBucket for SizeBucket {
     fn child(&self, direction: Direction) -> Link<Self> {
         match direction {
-            Direction::Left => self.0.left_size.map(NonNull::cast),
-            Direction::Right => self.0.right_size.map(NonNull::cast),
+            Direction::Left => self.0.left_size().map(NonNull::cast),
+            Direction::Right => self.0.right_size().map(NonNull::cast),
         }
     }
 
     fn set_child(&mut self, child: Link<Self>, direction: Direction) {
         match direction {
-            Direction::Left => self.0.left_size = child.map(NonNull::cast),
-            Direction::Right => self.0.right_size = child.map(NonNull::cast),
+            Direction::Left => self.0.set_left_size(child.map(NonNull::cast)),
+            Direction::Right => self.0.set_right_size(child.map(NonNull::cast)),
         }
     }
 
     fn color(&self) -> Color {
-        self.0.size_color
+        self.0.size_color()
     }
 
     fn set_color(&mut self, color: Color) {
-        self.0.size_color = color
+        self.0.set_size_color(color)
     }
 }
 
@@ -165,7 +211,7 @@ impl OrderBucket {
     }
 
     pub fn size(&self) -> usize {
-        self.0.size as usize
+        self.0.size()
     }
 }
 
@@ -231,24 +277,24 @@ impl Ord for OrderBucket {
 impl TreeBucket for OrderBucket {
     fn child(&self, direction: Direction) -> Link<Self> {
         match direction {
-            Direction::Left => self.0.left_order.map(NonNull::cast),
-            Direction::Right => self.0.right_order.map(NonNull::cast),
+            Direction::Left => self.0.left_order().map(NonNull::cast),
+            Direction::Right => self.0.right_order().map(NonNull::cast),
         }
     }
 
     fn set_child(&mut self, child: Link<Self>, direction: Direction) {
         match direction {
-            Direction::Left => self.0.left_order = child.map(NonNull::cast),
-            Direction::Right => self.0.right_order = child.map(NonNull::cast),
+            Direction::Left => self.0.set_left_order(child.map(NonNull::cast)),
+            Direction::Right => self.0.set_right_order(child.map(NonNull::cast)),
         }
     }
 
     fn color(&self) -> Color {
-        self.0.order_color
+        self.0.order_color()
     }
 
     fn set_color(&mut self, color: Color) {
-        self.0.order_color = color
+        self.0.set_order_color(color)
     }
 }
 
