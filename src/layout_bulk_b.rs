@@ -517,7 +517,7 @@ mod unsafe_layout_bulk_alloc_tests {
 /// Method [`alloc`] and [`dealloc`] check whether the required [`Layout`] fits the
 /// cache or not.
 /// If the [`Layout`] does not fit the cache, the methods delegate the request to the backend;
-/// otherwise; [`dealloc`] stores the passed pointer into the cache,
+/// otherwise, [`dealloc`] stores the passed pointer into the cache,
 /// and [`alloc`] dispatches and returns a pointer from the cache.
 ///
 /// See [`alloc`] and [`dealloc`] for the details.
