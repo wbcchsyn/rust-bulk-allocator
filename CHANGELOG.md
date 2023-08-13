@@ -32,7 +32,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 ### Changed
 - Document
 
-## 0.5.0 - 2023-08-14
+## 0.5.2 - 2023-08-14
 ### Changed
 - Improve struct BulkAlloc
 - The value of constant MEMORY\_CHANK\_SIZE
